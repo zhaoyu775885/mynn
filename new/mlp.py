@@ -81,5 +81,52 @@ def mlp_mini_batch(X, y, weight0, b0, weight1, b1, batch_size=32):
         weight1 -= gd_weight1*gama_1
         b1 -= gd_b1*gama_1
 
+class MultilayerPerceptron:
+    def __init__(self):
+        self.n_samp = 0
+        self.n_feat = 0
+        self.n_class = 0
+    
+    def fit(self, X, y, n_hiddens = []):
+        self.n_samp, self.n_feat = X.shape
+        self.n_class = len(set(y))
+        self.n_hiddens = n_hiddens
+        self.n_layers = len(self.n_hiddens) + 1
+        self.init_params()
+        
+    def init_params(self):
+        self.ws = []
+        self.bs = []
+        if self.n_layers == 1:
+            nrow, ncol = self.n_feat, self.n_class
+            tmp_w = np.random.normal(0, 1, [nrow, ncol])
+            tmp_b = np.random.normal(0, 1, [ncol])
+            self.ws.append(tmp_w)
+            self.bs.append(tmp_b)
+        for ilayer in range(self.n_layers):
+            nrow, ncol = 0, 0
+            if ilayer == 0:
+                nrow, ncol = self.n_feat, self.n_hiddens[ilayer]
+            elif ilayer == self.n_layers-1:
+                nrow, ncol = self.n_hiddens[-1], self.n_class
+            else:
+                nrow, ncol = self.n_hiddens[ilayer-1], self.n_hiddens[ilayer]
+            tmp_w = np.random.normal(0, 1, [nrow, ncol])
+            tmp_b = np.random.normal(0, 1, [ncol])
+            self.ws.append(tmp_w)
+            self.bs.append(tmp_b)
+        
+    def summary(self):
+        print(self.n_feat, ' input features, ', self.n_class, ' classes', )
+        print(self.n_layers, ' hidden layers: ', self.n_hiddens)
+        for each in self.ws:
+            print(each.shape)
+        
 if __name__ == '__main__':
     print(sigmoid(1))
+    train_file = './data/train.csv'
+    X_train, y_train = read_mnist(train_file, True)
+    
+    model = MultilayerPerceptron()
+    model.fit(X_train, y_train, [10])
+    model.summary()

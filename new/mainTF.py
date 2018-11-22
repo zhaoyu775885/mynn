@@ -116,10 +116,10 @@ if __name__ == '__main__':
     
     n_neuron = 50
     
-    weight0 = tf.Variable(tf.random_normal([n_feat, n_neuron], 0, 1), name='weights')
-    weight1 = tf.Variable(tf.random_normal([n_neuron, n_class], 0, 1), name='weights')
-    b0 = tf.Variable(tf.zeros([n_neuron]), name='bias')
-    b1 = tf.Variable(tf.zeros([n_class]), name='bias')
+    weight0 = tf.Variable(tf.random_normal([n_feat, n_neuron], 0, 1), name='w0')
+    weight1 = tf.Variable(tf.random_normal([n_neuron, n_class], 0, 1), name='w1')
+    b0 = tf.Variable(tf.zeros([n_neuron]), name='b0')
+    b1 = tf.Variable(tf.zeros([n_class]), name='b1')
     
     input_X = tf.placeholder(dtype=tf.float32, shape=[None, n_feat])
     input_y = tf.placeholder(dtype=tf.int64, shape=[None])
