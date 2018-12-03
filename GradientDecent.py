@@ -33,13 +33,13 @@ def grad_softmax(x, y_label, weight, b):
     print(type(x), type(y_label))
     
 def cross_ent(x, y_label, weight, b):
-    predict_y = softmax(np.matmul(x, weight)+b)
+    pr = softmax(np.matmul(x, weight)+b)
     if x.ndim == 1 and type(y_label)==int:
         return -np.log(predict_y[y_label])
     if x.ndim == 2 and y_label.ndim == 1:
         loss = 0
         for i in range(y_label.shape[0]):
-            loss -= np.log(predict_y[i][y_label[i]])
+            loss -= np.log(pr[i][y_label[i]])
         return loss
 
 def loss(x, y, weight, b):
@@ -74,7 +74,7 @@ def mini_batch(x, y_label, weight, b):
     batch_num = int(np.ceil(n_case/batch_size))
     gama = 1
     for i in range(batch_num):
-        print(i, ' : loss = ', loss(x, y_label, weight, b), ', acc = ', accuracy(x, y_label, weight, b))
+        print('{0} : {1:.6f}, {2:.6f}'.format(i, loss(x, y_label, weight, b), accuracy(x, y_label, weight, b)))
         x_batch = x[i*batch_size:min(i*batch_size+batch_size, n_case), :]
         y_batch = y_label[i*batch_size:min(i*batch_size+batch_size, n_case)]
         tmp_batch_size = min(i*batch_size+batch_size, n_case) - i*batch_size

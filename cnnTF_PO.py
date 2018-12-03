@@ -218,7 +218,7 @@ if '__main__' == __name__:
     for i in range(loops_cnt):
         seq = np.arange(n_samp)
         np.random.shuffle(seq)
-        for epoch in range(batch_num):
+        for epoch in range(100):
             scope = seq[range(epoch * batch_size, min((epoch + 1) * batch_size, n_samp))]
             X_batch = X_train[scope, :]
             y_batch = y_train[scope]
