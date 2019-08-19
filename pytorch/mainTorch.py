@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 BATCH_SIZE = 32
+classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 def imshow(img):
     img = img/2 + 0.5
@@ -40,36 +41,39 @@ class Net(nn.Module):
 
 class Learner():
     def __init__(self, data_dir):
-        self.net = Net()
+        # set device
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+        # set data loader pipeline
+        self.trainloader = self._build_dataloader(data_dir, train=True)
+        self.testloader = self._build_dataloader(data_dir, train=False)
+
+        self.net = Net()
         self.net.to(self.device)
+
+        self.criterion = nn.CrossEntropyLoss()
+
         self.opt = optim.SGD(self.net.parameters(), lr=1e-2, momentum=0.9)
 
-    def load_data(self, data_dir):
+    def _build_dataloader(self, data_dir, train=True):
         transform = transforms.Compose([transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-
-        trainset = torchvision.datasets.CIFAR10(root=data_dir, train=True,
-                transform=transform)
-        self.trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE,
-                shuffle=True, num_workers=2)
-
-        testset = torchvision.datasets.CIFAR10(root=data_dir, train=False,
-                transform=transform)
-        self.testloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE,
-                shuffle=True, num_workers=2)
+        dataset = torchvision.datasets.CIFAR10(root=data_dir, train=train, transform=transform)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,
+                                                shuffle=True, num_workers=2)
+        return dataloader
 
     def metrics(self, outputs, labels):
         _, predicted = torch.max(outputs, 1)
         correct = (predicted == labels).sum().item()
-        loss = nn.CrossEntropyLoss(outputs, labels)
+        loss = self.criterion(outputs, labels)
         accuracy = correct / labels.size(0)
         return accuracy, loss
 
     def train(self, n_epoch=10):
         for epoch in range(n_epoch):
             running_loss = 0
-            for i, data in enumerate(trainloader, 0):
+            for i, data in enumerate(self.trainloader, 0):
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
                 self.opt.zero_grad()
 
@@ -86,8 +90,7 @@ class Learner():
 
         print('Finished Training')
 
-#classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-
 if __name__ == '__main__':
-    resnet = ResNet()
-    resnet.train()
+    data_dir = '~/Dataset'
+    learner = Learner(data_dir)
+    learner.train()
