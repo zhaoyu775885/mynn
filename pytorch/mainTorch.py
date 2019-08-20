@@ -7,7 +7,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-BATCH_SIZE = 32
+BATCH_SIZE = 64
+INIT_LR = 1e-2
+MOMENTUM = 0.9
+L2_REG = 5e-4
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 def imshow(img):
@@ -48,20 +51,34 @@ class Learner():
         self.trainloader = self._build_dataloader(data_dir, train=True)
         self.testloader = self._build_dataloader(data_dir, train=False)
 
+        # define forward computational graph
         self.net = Net()
         self.net.to(self.device)
 
-        self.criterion = nn.CrossEntropyLoss()
+        # setup loss function
+        self.criterion = self.loss_fn()
 
-        self.opt = optim.SGD(self.net.parameters(), lr=1e-2, momentum=0.9)
+        # setup optimizatizer 
+        self.opt = self.setup_optimizer()
+        #self.lr_scheduler = self.setup_lr_scheduler(self.opt)
 
     def _build_dataloader(self, data_dir, train=True):
         transform = transforms.Compose([transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         dataset = torchvision.datasets.CIFAR10(root=data_dir, train=train, transform=transform)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,
-                                                shuffle=True, num_workers=2)
+                                                shuffle=True, num_workers=4)
         return dataloader
+
+    def loss_fn(self):
+        return nn.CrossEntropyLoss()
+
+    def setup_optimizer(self):
+        return optim.SGD(self.net.parameters(), lr=INIT_LR, momentum=MOMENTUM)
+                #weight_decay=L2_REG)
+
+    def setup_lr_scheduler(self, opt):
+        return torch.optim.lr_scheduler.MultiStepLR(opt, milestones=[20, 30], gamma=0.1)
 
     def metrics(self, outputs, labels):
         _, predicted = torch.max(outputs, 1)
@@ -72,7 +89,7 @@ class Learner():
 
     def train(self, n_epoch=10):
         for epoch in range(n_epoch):
-            running_loss = 0
+            self.lr_scheduler.step()
             for i, data in enumerate(self.trainloader, 0):
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
                 self.opt.zero_grad()
@@ -82,13 +99,25 @@ class Learner():
                 loss.backward()
                 self.opt.step()
 
-                running_loss += loss
-                if (i+1) % 1000 == 0:
-                    print('[%d, %5d] loss: %.3f' % (epoch+1, i+1, running_loss/1000))
-                    print(accuracy)
-                    running_loss = 0
+                if (i+1) % 100 == 0:
+                    print(epoch+1, ' acc.={}, loss={}'.format(accuracy, loss))
+            self.test()
 
         print('Finished Training')
+
+    def test(self):
+        total_accuracy_sum = 0
+        total_loss_sum = 0
+        for i, data in enumerate(self.testloader, 0):
+            images, labels = data[0].to(self.device), data[1].to(self.device)
+            outputs = self.net(images)
+            accuracy, loss = self.metrics(outputs, labels)
+            total_accuracy_sum += accuracy
+            total_loss_sum += loss
+        avg_loss = total_loss_sum / len(self.testloader)
+        avg_acc = total_accuracy_sum / len(self.testloader)
+        print('acc.= {0}, loss={1}'.format(avg_acc, avg_loss))
+        print('test')
 
 if __name__ == '__main__':
     data_dir = '~/Dataset'
