@@ -117,7 +117,6 @@ class Learner():
         avg_loss = total_loss_sum / len(self.testloader)
         avg_acc = total_accuracy_sum / len(self.testloader)
         print('acc.= {0}, loss={1}'.format(avg_acc, avg_loss))
-        print('test')
 
 if __name__ == '__main__':
     data_dir = '~/Dataset'
