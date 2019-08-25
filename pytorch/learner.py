@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from models.lenet import LeNet
 from dataset.cifar10 import Cifar10
+from models.lenet import LeNet
 
 BATCH_SIZE = 128
 INIT_LR = 1e-2
@@ -24,7 +24,7 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 #     print(' '.join([classes[labels[j]] for j in range(batch_size)]))
 
 class Learner():
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, net=LeNet):
         # set device & build dataset
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.dataset = Cifar10(data_dir)
@@ -34,7 +34,7 @@ class Learner():
         self.testloader = self._build_dataloader(100, is_train=False)
 
         # define forward computational graph
-        self.net = self._forward()
+        self.forward = net().to(self.device)
 
         # setup loss function
         self.criterion = self._loss_fn()
@@ -43,9 +43,9 @@ class Learner():
         self.opt = self._setup_optimizer()
         self.lr_scheduler = self._setup_lr_scheduler()
 
-    def _forward(self):
-        net = LeNet()
-        return net.to(self.device)
+    # def _forward(self):
+    #     net = LeNet()
+    #     return net.to(self.device)
 
     def _build_dataloader(self, batch_size, is_train):
         return self.dataset.build_dataloader(batch_size, is_train)
@@ -54,7 +54,7 @@ class Learner():
         return nn.CrossEntropyLoss()
 
     def _setup_optimizer(self):
-        return optim.SGD(self.net.parameters(), lr=INIT_LR, momentum=MOMENTUM, weight_decay=L2_REG)
+        return optim.SGD(self.forward.parameters(), lr=INIT_LR, momentum=MOMENTUM, weight_decay=L2_REG)
 
     def _setup_lr_scheduler(self):
         return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[100, 150, 200], gamma=0.1)
@@ -73,7 +73,7 @@ class Learner():
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
                 self.opt.zero_grad()
 
-                outputs = self.net(inputs)
+                outputs = self.forward(inputs)
                 accuracy, loss = self.metrics(outputs, labels)
                 loss.backward()
                 self.opt.step()
@@ -90,7 +90,7 @@ class Learner():
         total_loss_sum = 0
         for i, data in enumerate(self.testloader, 0):
             images, labels = data[0].to(self.device), data[1].to(self.device)
-            outputs = self.net(images)
+            outputs = self.forward(images)
             accuracy, loss = self.metrics(outputs, labels)
             total_accuracy_sum += accuracy
             total_loss_sum += loss.item()
