@@ -12,4 +12,4 @@ clean_recursive() {
     done
 }
 
-clean_recursive ./
+clean_recursive .
