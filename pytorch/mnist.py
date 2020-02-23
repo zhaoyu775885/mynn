@@ -24,27 +24,24 @@ class Lenet(nn.Module):
         self.input_size = input_size
         self.hidden_sizes = hidden_sizes
         self.n_classes = n_classes
-        
         self.fc_layers, self.bn_layers = self._build_hidden_layers()
         self.output_layer = self._build_output_layer()
         
     def _build_hidden_layers(self):
-        fc_layers = [TTLayer([32, 32], [28, 28], [10])]
-        bn_layers = [nn.BatchNorm1d(1024)]
-        # fc_layers = [nn.Linear(self.input_size, self.hidden_sizes[0], bias=False)]
-        # bn_layers = [nn.BatchNorm1d(self.hidden_sizes[0])]
-        # for i, _ in enumerate(self.hidden_sizes[:-1]):
-        #     fc_layers.append(nn.Linear(self.hidden_sizes[i], self.hidden_sizes[i+1], bias=False))
-        #     bn_layers.append(nn.BatchNorm1d(self.hidden_sizes[i+1]))
+        # fc_layers = [TTLayer([8, 4, 8, 4], [7, 4, 7, 4], [2, 2, 2])]
+        # bn_layers = [nn.BatchNorm1d(1024)]
+        fc_layers = [nn.Linear(self.input_size, self.hidden_sizes[0], bias=False)]
+        bn_layers = [nn.BatchNorm1d(self.hidden_sizes[0])]
+        for i, _ in enumerate(self.hidden_sizes[:-1]):
+            fc_layers.append(nn.Linear(self.hidden_sizes[i], self.hidden_sizes[i+1], bias=False))
+            bn_layers.append(nn.BatchNorm1d(self.hidden_sizes[i+1]))
         return nn.ModuleList(fc_layers), nn.ModuleList(bn_layers)
     
     def _build_output_layer(self):
-        return nn.Linear(self.hidden_sizes[-1], self.n_classes, bias=False)
+        return nn.Linear(self.hidden_sizes[-1], self.n_classes, bias=True)
         
     def forward(self, x):
         for fc, bn in zip(self.fc_layers, self.bn_layers):
-            print(x.shape)
-            print(fc(x).shape)
             x = F.relu(bn(fc(x)))
         return self.output_layer(x)
 
@@ -65,11 +62,11 @@ if __name__ == '__main__':
     train_loader = dataset.build_dataloader(train_batch_size, is_train=True)
     test_loader = dataset.build_dataloader(test_batch_size, is_train=False)
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    hidden_sizes = [512]
+    device = torch.device('cpu')
+    #device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    hidden_sizes = [1024]
     lenet = Lenet(n_feats, hidden_sizes, n_classes).to(device)
     print(lenet)
-
 
     optimizer = optim.SGD(lenet.parameters(), lr=INIT_LR, momentum=MOMENTUM, weight_decay=L2_REG)
     lr = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5, 10, 15], gamma=0.1)
