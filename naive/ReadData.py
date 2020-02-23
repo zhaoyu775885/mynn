@@ -8,9 +8,11 @@ Created on Wed Aug 29 15:36:17 2018
 import numpy as np
 import pandas as pd
 
-def read_mnist(file, normal_flag=True):
+def read_mnist(file, normal_flag=True, conv_flag=True):
     pf = pd.read_csv(file)
-    X_data = np.array(pf.iloc[:, 1:], dtype='float32').reshape(-1, 28, 28, 1)
+    X_data = np.array(pf.iloc[:, 1:], dtype='float32')
+    if conv_flag:
+        X_data = X_data.reshape(-1, 28, 28, 1)
     print(X_data.shape)
     y_data = np.array(pf.iloc[:, 0], dtype='int32')
     if normal_flag:
