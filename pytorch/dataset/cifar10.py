@@ -10,7 +10,8 @@ class Cifar10():
         transform = transforms.Compose([transforms.ToTensor(),
                                         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         # explain the meaning
-        dataset = torchvision.datasets.CIFAR10(root=self.data_dir, train=is_train, transform=transform)
+        dataset = torchvision.datasets.CIFAR10(root=self.data_dir, train=is_train, 
+                                               transform=transform)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                                  shuffle=True, num_workers=4)
         return dataloader

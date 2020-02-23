@@ -33,7 +33,7 @@ class Learner():
         self.trainloader = self._build_dataloader(BATCH_SIZE, is_train=True)
         self.testloader = self._build_dataloader(100, is_train=False)
 
-        # define forward computational graph
+        # define forward computational
         self.forward = net().to(self.device)
 
         # setup loss function
@@ -42,10 +42,6 @@ class Learner():
         # setup optimizatizer
         self.opt = self._setup_optimizer()
         self.lr_scheduler = self._setup_lr_scheduler()
-
-    # def _forward(self):
-    #     net = LeNet()
-    #     return net.to(self.device)
 
     def _build_dataloader(self, batch_size, is_train):
         return self.dataset.build_dataloader(batch_size, is_train)
@@ -67,8 +63,9 @@ class Learner():
         return accuracy, loss
 
     def train(self, n_epoch=250):
+        # print(len(self.opt.param_groups))
         for epoch in range(n_epoch):
-            self.lr_scheduler.step()
+            print(epoch)
             for i, data in enumerate(self.trainloader, 0):
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
                 self.opt.zero_grad()
@@ -77,9 +74,11 @@ class Learner():
                 accuracy, loss = self.metrics(outputs, labels)
                 loss.backward()
                 self.opt.step()
-
+                
                 if (i+1) % 100 == 0:
                     print(i+1, ' acc={0:.2f}, loss={1:.3f}'.format(accuracy*100, loss))
+                    
+            self.lr_scheduler.step()
             print(epoch+1, 'finished')
             self.test()
 
