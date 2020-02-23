@@ -14,7 +14,7 @@ from torchvision import datasets, transforms
 from dataset.mnist import Mnist
 from TTLayer import TTLayer
 
-INIT_LR = 1e-2
+INIT_LR = 1e-1
 MOMENTUM = 0.9
 L2_REG = 0
 
@@ -28,13 +28,13 @@ class Lenet(nn.Module):
         self.output_layer = self._build_output_layer()
         
     def _build_hidden_layers(self):
-        # fc_layers = [TTLayer([8, 4, 8, 4], [7, 4, 7, 4], [2, 2, 2])]
-        # bn_layers = [nn.BatchNorm1d(1024)]
-        fc_layers = [nn.Linear(self.input_size, self.hidden_sizes[0], bias=False)]
-        bn_layers = [nn.BatchNorm1d(self.hidden_sizes[0])]
-        for i, _ in enumerate(self.hidden_sizes[:-1]):
-            fc_layers.append(nn.Linear(self.hidden_sizes[i], self.hidden_sizes[i+1], bias=False))
-            bn_layers.append(nn.BatchNorm1d(self.hidden_sizes[i+1]))
+        fc_layers = [TTLayer([4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [2, 2, 2, 2])]
+        bn_layers = [nn.BatchNorm1d(1024)]
+        # fc_layers = [nn.Linear(self.input_size, self.hidden_sizes[0], bias=False)]
+        # bn_layers = [nn.BatchNorm1d(self.hidden_sizes[0])]
+        # for i, _ in enumerate(self.hidden_sizes[:-1]):
+        #     fc_layers.append(nn.Linear(self.hidden_sizes[i], self.hidden_sizes[i+1], bias=False))
+        #     bn_layers.append(nn.BatchNorm1d(self.hidden_sizes[i+1]))
         return nn.ModuleList(fc_layers), nn.ModuleList(bn_layers)
     
     def _build_output_layer(self):
@@ -53,7 +53,7 @@ def metrics(criterion, outputs, labels):
     return accuracy, loss
 
 if __name__ == '__main__':
-    n_feats = 784
+    n_feats = 1024
     n_classes = 10
     
     dataset = Mnist('../dataset/data')
