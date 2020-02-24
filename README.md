@@ -14,6 +14,6 @@ Tensorflow version:
 Pytorch version:
 1. CNN [Resnet, Densenet, Inception v3, Mobilenet, Shufflenet, etc.]
 2. RNN [RNN, GRU, LSTM]
-3. Transformer [Bert, GPL]
+3. Transformer [Bert, GPT]
 4. DRL [DQN series, DDPG, PPO, etc.]
 5. NAS [Darts, SNAS, Proxyless, Single-path-one-shot, BayesianNAS]
