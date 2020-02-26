@@ -14,9 +14,9 @@ from torchvision import datasets, transforms
 from dataset.mnist import Mnist
 from TTLayer import TTLayer
 
-INIT_LR = 1e-1
+INIT_LR = 0.1
 MOMENTUM = 0.9
-L2_REG = 0
+L2_REG = 1e-5
 
 class Lenet(nn.Module):
     def __init__(self, input_size, hidden_sizes, n_classes):
@@ -57,25 +57,24 @@ if __name__ == '__main__':
     n_classes = 10
     
     dataset = Mnist('../dataset/data')
-    train_batch_size = 256
+    train_batch_size = 128
     test_batch_size = 100
     train_loader = dataset.build_dataloader(train_batch_size, is_train=True)
     test_loader = dataset.build_dataloader(test_batch_size, is_train=False)
 
-    device = torch.device('cpu')
-    #device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     hidden_sizes = [1024]
     lenet = Lenet(n_feats, hidden_sizes, n_classes).to(device)
     print(lenet)
 
     optimizer = optim.SGD(lenet.parameters(), lr=INIT_LR, momentum=MOMENTUM, weight_decay=L2_REG)
-    lr = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5, 10, 15], gamma=0.1)
+    lr = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5, 10, 15, 20], gamma=0.1)
     
     criterion = nn.CrossEntropyLoss()
     
-    n_epoch = 20
+    n_epoch = 25
     for epoch in range(n_epoch):
-        lr.step()
         for i, data in enumerate(train_loader):
             batch_size = data[0].shape[0]
             images, labels = data[0].view(batch_size, -1).to(device), data[1].to(device)
@@ -89,19 +88,19 @@ if __name__ == '__main__':
             if (i+1) % 100 == 0:
                 print(i+1, ' acc={0:.2f}, loss={1:.3f}'.format(accuracy*100, loss))
         print(epoch+1, 'finished')
-
+        lr.step()
         total_accuracy_sum = 0
         total_loss_sum = 0
-        for i, data in enumerate(test_loader, 0):
-            images, labels = data[0].view(test_batch_size, -1).to(device), data[1].to(device)
-            outputs = lenet(images)
-            accuracy, loss = metrics(criterion, outputs, labels)
-            total_accuracy_sum += accuracy
-            total_loss_sum += loss.item()
-        avg_loss = total_loss_sum / len(test_loader)
-        avg_acc = total_accuracy_sum / len(test_loader)
-        print('acc= {0:.2f}, loss={1:.3f}'.format(avg_acc * 100, avg_loss))
-
+        with torch.no_grad():
+            for i, data in enumerate(test_loader, 0):
+                images, labels = data[0].view(test_batch_size, -1).to(device), data[1].to(device)
+                outputs = lenet(images)
+                accuracy, loss = metrics(criterion, outputs, labels)
+                total_accuracy_sum += accuracy
+                total_loss_sum += loss.item()
+            avg_loss = total_loss_sum / len(test_loader)
+            avg_acc = total_accuracy_sum / len(test_loader)
+            print('acc= {0:.2f}, loss={1:.3f}'.format(avg_acc * 100, avg_loss))
 
     print('Finished Training')
 
