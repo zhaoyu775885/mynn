@@ -12,19 +12,6 @@ def unicodeToAscii(s, all_letters):
         and c in all_letters
     )
 
-def get_batch(data, idx_list, batch_size, head):
-    # whether to add fixed length slicing
-    length = len(idx_list)
-    indices = idx_list[np.arange(head,head+batch_size) if head+batch_size<=length else \
-                       np.concatenate((np.arange(head,length), np.arange(head+batch_size-length)))]
-    batch = [item[indices] for item in data]
-    return batch, indices, head+batch_size
-
-def accuracy(probs, labels):
-    _, predicts = torch.max(probs, dim=-1)
-    correct = (predicts == labels).sum().item()
-    return correct / labels.shape[0]
-
 class Vocab():
     def __init__(self, words):
         self.words = words
@@ -88,8 +75,7 @@ class NameDataset():
             for j in range(len(item[0]), self.max_name_length):
                 self.data_features[i, j, self.char_vocab.item2index(self.pad)] = 1
 
-    def init_batch_loader(self, batch_size=32):
-        self.batch_size = batch_size
+    def init_batch_loader(self):
         self.batch_pointer = 0
         self.idx_list = np.arange(self.n_samples)
         random.shuffle(self.idx_list)
@@ -99,27 +85,36 @@ class NameDataset():
 
     def __next__(self):
         data_pack = [self.data_features, self.data_labels, self.data_lengths]
-        indices = self.idx_list[np.arange(self.batch_pointer, self.batch_pointer+self.batch_size) if
-            self.batch_pointer+self.batch_size <= self.n_samples else np.concatenate(
-            (np.arange(self.batch_pointer, self.n_samples), np.arange(self.batch_pointer+self.batch_size-self.n_samples)))]
-        batch = [item[indices] for item in data_pack]
+        if self.batch_pointer+self.batch_size <= self.n_samples:
+            raw_indices = np.arange(self.batch_pointer, self.batch_pointer+self.batch_size)
+        else:
+            raw_indices = np.concatenate((np.arange(self.batch_pointer, self.n_samples), \
+                np.arange(self.batch_pointer+self.batch_size-self.n_samples)))
+            self.batch_pointer -= self.n_samples
         self.batch_pointer += self.batch_size
+        indices = self.idx_list[raw_indices]
+        batch = [item[indices] for item in data_pack]
         return batch
+    
+    def build_dataloader(self, batch_size=32):
+        self.batch_size = batch_size
+        return self
+
+    def n_iters(self):
+        return int(np.ceil(self.n_samples/self.batch_size))
 
 if __name__ == '__main__':
-    # data_path = './data/names/'
-    data_path = '/home/zhaoyu/Datasets/NLPBasics/names/'
+    data_path = '../data/names/'
+    #data_path = '/home/zhaoyu/Datasets/NLPBasics/names/'
     all_letters = string.ascii_letters + " .,;'"
 
     name_dataset = NameDataset(data_path, '/', all_letters)
     print(name_dataset.lang_vocab.dict)
     print(name_dataset.char_vocab.dict)
-    print(name_dataset.raw_data)
+    #print(name_dataset.raw_data)
 
-    name_dataset.init_batch_loader(batch_size=1)
-    i = 0
-    for i, item in enumerate(name_dataset):
-        if i<2:
-            print(i, item)
-        else:
-            break
+    name_dataset.init_batch_loader()
+    loader = name_dataset.build_dataloader(batch_size=32)
+    for i, item in enumerate(loader):
+        if (i+1) % 100 == 0:
+            print(item[0].shape)
