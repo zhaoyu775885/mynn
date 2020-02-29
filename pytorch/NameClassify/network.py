@@ -6,7 +6,7 @@ class RNNNaive(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(RNNNaive, self).__init__()
         self.hidden_size = hidden_size
-        self.i2h = nn.Linear(input_size + hidden_size, hidden_size)
+        self.i2h = nn.Linear(input_size+hidden_size, hidden_size)
         self.h2o = nn.Linear(hidden_size, output_size)
 
     def forward(self, input, hidden):
@@ -23,10 +23,12 @@ class RNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(RNN, self).__init__()
         self.hidden_size = hidden_size
-        self.rnn = nn.RNN(input_size, self.hidden_size, num_layers=1, batch_first=True)
-        self.h2o = nn.Linear(hidden_size, output_size)
+        self.rnn = nn.RNN(input_size, self.hidden_size, num_layers=2, 
+                batch_first=True, bidirectional=True, nonlinearity='tanh')
+        self.h2o = nn.Linear(self.hidden_size*2, output_size)
 
     def forward(self, inputs):
-        hidden = F.relu(self.rnn(inputs))
-        output = self.h2o(hidden)
-        return output, hidden
+        hiddens, _ = self.rnn(inputs)
+        #hiddens = F.tanh(hiddens)
+        outputs = self.h2o(hiddens)
+        return outputs
