@@ -88,7 +88,7 @@ class NameDataset():
         if self.batch_pointer+self.batch_size <= self.n_samples:
             raw_indices = np.arange(self.batch_pointer, self.batch_pointer+self.batch_size)
         else:
-            raw_indices = np.concatenate((np.arange(self.batch_pointer, self.n_samples), \
+            raw_indices = np.concatenate((np.arange(self.batch_pointer, self.n_samples),
                 np.arange(self.batch_pointer+self.batch_size-self.n_samples)))
             self.batch_pointer -= self.n_samples
         self.batch_pointer += self.batch_size
@@ -103,18 +103,43 @@ class NameDataset():
     def n_iters(self):
         return int(np.ceil(self.n_samples/self.batch_size))
 
+def split_dataset(data_paths):
+    for file in data_paths:
+        lines = list(set(open(file, encoding='utf-8').read().strip().split('\n')))
+        test_size = int(np.floor(len(lines)/5))
+        test_lines = random.sample(lines, k=test_size)
+        train_lines = []
+        for line in lines:
+            if line not in test_lines:
+                train_lines.append(line)
+                
+        print(file, len(lines), len(train_lines), len(test_lines))
+        elem = file.split('/')
+        train_file = '/'.join(['/'.join(elem[:-1]), 'train', elem[-1]])
+        test_file = '/'.join(['/'.join(elem[:-1]), 'test', elem[-1]])
+        with open(train_file, 'w', encoding='utf-8') as f:
+            for line in train_lines:
+                f.write(line+'\n')
+        with open(test_file, 'w', encoding='utf-8') as f:
+            for line in test_lines:
+                f.write(line+'\n')
+
 if __name__ == '__main__':
-    data_path = '../data/names/'
-    #data_path = '/home/zhaoyu/Datasets/NLPBasics/names/'
-    all_letters = string.ascii_letters + " .,;'"
+    # data_path = '../data/names/'
+    data_path = '/home/zhaoyu/Datasets/NLPBasics/names/'
+    data_abspath = os.path.abspath(data_path)
+    files = [os.path.join(data_abspath, file) for file in os.listdir(data_abspath) if '.txt' in file]
+    split_dataset(files)
 
-    name_dataset = NameDataset(data_path, '/', all_letters)
-    print(name_dataset.lang_vocab.dict)
-    print(name_dataset.char_vocab.dict)
-    #print(name_dataset.raw_data)
-
-    name_dataset.init_batch_loader()
-    loader = name_dataset.build_dataloader(batch_size=32)
-    for i, item in enumerate(loader):
-        if (i+1) % 100 == 0:
-            print(item[0].shape)
+    # all_letters = string.ascii_letters + " .,;'"
+    #
+    # name_dataset = NameDataset(data_path, '/', all_letters)
+    # print(name_dataset.lang_vocab.dict)
+    # print(name_dataset.char_vocab.dict)
+    # #print(name_dataset.raw_data)
+    #
+    # name_dataset.init_batch_loader()
+    # loader = name_dataset.build_dataloader(batch_size=32)
+    # for i, item in enumerate(loader):
+    #     if (i+1) % 100 == 0:
+    #         print(item[0].shape)

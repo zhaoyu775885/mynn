@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.optim as optim
 from name_data import NameDataset
 from network import RNNNaive, RNN
+import string
+import os
 
 BATCH_SIZE = 1
 INIT_LR = 1e-3
@@ -10,25 +12,34 @@ MOMENTUM = 0.9
 L2_REG = 1e-5
 
 class NameLearner():
-    def __init__(self, dataset, network):
+    def __init__(self, dataset_path, network):
         # set device & build dataset
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.data_path = dataset_path
+        self.data_train_path = os.path.join(self.data_path, 'train')
+        self.data_test_path = os.path.join(self.data_path, 'test')
         
-        self.dataset = dataset
-        self.net = network.to(self.device)
-
+        all_letters = string.ascii_letters + " .,;'"
+        self.dataset_train = NameDataset(self.data_train_path, '/', all_letters)
+        self.dataset_test = NameDataset(self.data_test_path, '/', all_letters)
+        
         # build dataloader
-        self.trainloader = self._build_dataloader(BATCH_SIZE)
+        self.trainloader = self._build_dataloader(BATCH_SIZE, train=True)
+        self.testloader = self._build_dataloader(1, train=False)
 
-        # setup loss function
+        n_hiddens = 128
+        self.net = network(self.dataset_train.n_letters, n_hiddens, self.dataset_train.n_labels)
+        self.net = self.net.to(self.device)
+
+        # setup loss function and optimizer
         self.criterion = self._loss_fn()
-
-        # setup optimizatizer
         self.opt = self._setup_optimizer()
         self.lr_scheduler = self._setup_lr_scheduler()
 
-    def _build_dataloader(self, batch_size):
-        return self.dataset.build_dataloader(batch_size)
+    def _build_dataloader(self, batch_size, train=True):
+        if train:
+            return self.dataset_train.build_dataloader(batch_size)
+        return self.dataset_test.build_dataloader(batch_size)
     
     def _loss_fn(self):
         return nn.CrossEntropyLoss()
@@ -49,7 +60,7 @@ class NameLearner():
     def train(self, n_epoch=25):
         for epoch in range(n_epoch):
             self.lr_scheduler.step()
-            self.dataset.init_batch_loader()
+            self.dataset_train.init_batch_loader()
             #init_hiddens = self.net.initHidden().to(self.device)
 
             pred_correct = 0
@@ -74,20 +85,27 @@ class NameLearner():
 
                 if (i+1) % 1000 == 0:
                     print(i+1, ' acc={0:.2f}, loss={1:.3f}, max_length={2}'.format(pred_correct*100/(i+1), loss, local_max_length))
-                if i == self.dataset.n_iters()-1:
+                if i == self.dataset_train.n_iters()-1:
                     print('overall acc={0:.2f}'.format(pred_correct*100/(i+1)))
                     break
             print(epoch+1, 'finished')
+            self.test()
         print('Finished Training')
 
-#    def test(self):
-#        total_accuracy_sum = 0
-#        total_loss_sum = 0
-#        for i, data in enumerate(self.testloader, 0):
-#            images, labels = data[0].to(self.device), data[1].to(self.device)
-#            outputs = self.net(images)
-#            accuracy, loss = self.metrics(outputs, labels)
-#            total_accuracy_sum += accuracy
-#            total_loss_sum += loss.item()
-#        avg_loss = total_loss_sum / len(self.testloader)
-#        avg_acc = total_accuracy_sum / len(self.testloader)
+    def test(self):
+        pred_correct = 0
+        self.dataset_test.init_batch_loader()
+        n_iters = self.dataset_test.n_iters()
+        print(n_iters, 'iterations')
+        for i, data in enumerate(self.testloader):
+           feats, labels, lengths = data
+           local_max_length = max(lengths)
+           inputs = feats.to(self.device)
+           outputs = self.net(inputs[:, :local_max_length, :])
+           accuracy, loss = self.metrics(outputs[:,-1,:], labels.to(self.device))
+           pred_correct += accuracy
+           # if (i+1) % 1000 == 0:
+           #     print(i+1, accuracy)
+           if i == n_iters - 1:
+               print('test acc={0:.2f}'.format(pred_correct * 100 / n_iters))
+               break
