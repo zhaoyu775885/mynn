@@ -127,19 +127,20 @@ def split_dataset(data_paths):
 if __name__ == '__main__':
     # data_path = '../data/names/'
     data_path = '/home/zhaoyu/Datasets/NLPBasics/names/'
-    data_abspath = os.path.abspath(data_path)
-    files = [os.path.join(data_abspath, file) for file in os.listdir(data_abspath) if '.txt' in file]
-    split_dataset(files)
-
-    # all_letters = string.ascii_letters + " .,;'"
-    #
-    # name_dataset = NameDataset(data_path, '/', all_letters)
-    # print(name_dataset.lang_vocab.dict)
-    # print(name_dataset.char_vocab.dict)
-    # #print(name_dataset.raw_data)
-    #
-    # name_dataset.init_batch_loader()
-    # loader = name_dataset.build_dataloader(batch_size=32)
-    # for i, item in enumerate(loader):
-    #     if (i+1) % 100 == 0:
-    #         print(item[0].shape)
+    
+#    data_abspath = os.path.abspath(data_path)
+#    files = [os.path.join(data_abspath, file) for file in os.listdir(data_abspath) if '.txt' in file]
+#    split_dataset(files)
+    
+    all_letters = string.ascii_letters + " .,;'"
+    
+    name_dataset = NameDataset(data_path, '/', all_letters)
+    print(name_dataset.lang_vocab.dict)
+    print(name_dataset.char_vocab.dict)
+    print(name_dataset.raw_data)
+    
+#     name_dataset.init_batch_loader()
+#     loader = name_dataset.build_dataloader(batch_size=32)
+#     for i, item in enumerate(loader):
+#         if (i+1) % 100 == 0:
+#             print(item[0].shape)
