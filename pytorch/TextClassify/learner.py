@@ -67,7 +67,7 @@ class Learner():
             for i, batch in enumerate(self.trainloader):
                 batch_size = batch.Phrase.shape[-1]
                 hiddens = self.net.init_hiddens(batch_size).to(self.device)
-                #print(i, batch.Sentiment, self.dataset_train.raw(batch.Phrase))
+                print(i, batch.Sentiment, self.dataset_train.raw(batch.Phrase))
                 texts, labels = batch.Phrase.to(self.device), batch.Sentiment.to(self.device)
                 self.opt.zero_grad()
                 logits = self.net(texts, hiddens)
