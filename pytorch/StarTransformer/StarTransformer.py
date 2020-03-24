@@ -215,7 +215,7 @@ class StarTransformerEncoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
         
-    def forward(self, src, rly):
+    def forward(self, src, mask=None, src_key_padding_mask=None):
         r"""Pass the input through the encoder layers in turn.
 
         Args:
@@ -227,11 +227,10 @@ class StarTransformerEncoder(nn.Module):
             see the docs in Transformer class.
         """
         output = src
-        emb = src
         rly = src.mean(0, keepdim=True)
         
         for i in range(self.num_layers):
-            output, rly = self.layers[i](output, emb, rly)
+            output, rly = self.layers[i](output, src, rly)
 
 #        if self.norm:
 #            output = self.norm(output)
@@ -246,9 +245,8 @@ if __name__ == '__main__':
 #    msa = MultiheadStarAttention(5, 1)
 #    x, relay = msa(x, e)
     st = StarTransformerLayer(5, 1)
-    ste = StarTransformerEncoder(st, 2)
-    x, r = ste(x, r)    
 #    x, r = st(x, e, r)
-    print(x.shape, r.shape)
 
-    
+    ste = StarTransformerEncoder(st, 2)
+    x, r = ste(x)
+    print(x.shape, r.shape)    
