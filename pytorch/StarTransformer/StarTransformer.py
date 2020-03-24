@@ -123,21 +123,30 @@ class MultiheadStarAttention(nn.Module):
         att = (alphas * v).sum(3, keepdim=False).view(B,self.nhead*self.vdim,L).permute(2, 0, 1)
         return att  
     
-    def _ring_attn(self, q, k, v, k_c, v_c):
+    def _ring_attn_v0(self, q, k, v, k_c, v_c):
+        '''
+        To Be Removed
+        args:
+            q, k, v : [L, B, D]
+            k_c, v_c : [2, L, B, D]
+        '''
+        leng, bsz, _ = q.shape
         # [L,B,D] -> [B,D,L]
-        leng, bsz, d_model = q.shape
         q, k, v = q.permute(1,2,0), k.permute(1,2,0), v.permute(1,2,0)
+        # [2, L,B,D] -> [B,D,2,L]
         k_c, v_c = k_c.permute(2,3,0,1), v_c.permute(2,3,0,1)
+        # [B,D,L] -> [B,D,1,L]
         q = q.unsqueeze(2)
 #        print(q.shape)
-        # Due the Unfold requiring 4-D inputs, extend_dim [k, v] to 4-D [B, D, L, 1] 
+        # Due the Unfold requiring 4-D inputs, extend_dim k, v to 4-D [B, D, L, 1]
         # and then unfold to [B, kernel_size*D, L] -> [B, D, kernel_size, L]
         k = self.unfold(k.unsqueeze(-1)).reshape([bsz, self.kdim, self.kernel_size, leng])
         v = self.unfold(v.unsqueeze(-1)).reshape([bsz, self.kdim, self.kernel_size, leng])
-        # [2,L,B,D] -> [B,D,2,L]
-        # [B, D, kernel_size+2, L]
+        # append k, v to [B, D, kernel_size+2, L] @ the kernel_size dim
+        print(k.shape, k_c.shape)
         k, v = torch.cat([k, k_c], -2), torch.cat([v, v_c], -2)
 #        print(q.shape, v.shape)
+        print((q*k).shape)
         alphas = F.softmax((q*k).sum(1, keepdim=True)/np.sqrt(self.kdim), 2)
 #        print(alphas.shape)
         # [B, D, L] -> [L, B, D]
