@@ -24,10 +24,9 @@ class MultiheadStarAttention(nn.Module):
         embed_dim: total dimension of the model, $d_{model}$
         nhead: parallel attention heads.
         dropout: a Dropout layer on attn_output_weights. Default: 0.0.
-    ToDo:
-        multihead, Finished
+    TBD:
         dropout, Nearly finished
-        mask, TBD
+        mask
     '''
     def __init__(self, embed_dim, nhead, kdim=None, vdim=None, kernel_size=3, dropout=0.0):
         super(MultiheadStarAttention, self).__init__()
@@ -166,11 +165,11 @@ class StarTransformerLayer(nn.Module):
         self.linear2 = nn.Linear(dim_feedforward, embed_dim)
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
-        self.dropout1 = nn.Dropout(embed_dim)
-        self.dropout2 = nn.Dropout(embed_dim)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
         self.activation = _get_activation_fn(activation)
         
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
+    def forward(self, src, emb, rly, src_mask=None, src_key_padding_mask=None):
         r"""Pass the input through the encoder layer.
 
         Args:
@@ -181,8 +180,9 @@ class StarTransformerLayer(nn.Module):
         Shape:
             see the docs in Transformer class.
         """
-        src2 = self.self_attn(src, src, src, attn_mask=src_mask,
-                              key_padding_mask=src_key_padding_mask)[0]
+        src2, rly2  = self.self_star_attn(src, emb, relay=rly)
+        src = torch.cat([src, rly], dim=0)
+        src2 = torch.cat([src2, rly2], dim=0)
         src = src + self.dropout1(src2)
         src = self.norm1(src)
         if hasattr(self, "activation"):
@@ -191,9 +191,10 @@ class StarTransformerLayer(nn.Module):
             src2 = self.linear2(self.dropout(F.relu(self.linear1(src))))
         src = src + self.dropout2(src2)
         src = self.norm2(src)
-        return src
+        src, rly = src[:-1,...], src[-1,...].unsqueeze(0)
+        return src, rly
         
-class TransformerEncoder(nn.Module):
+class StarTransformerEncoder(nn.Module):
     r"""TransformerEncoder is a stack of N encoder layers
 
     Args:
@@ -209,12 +210,12 @@ class TransformerEncoder(nn.Module):
     """
 
     def __init__(self, encoder_layer, num_layers, norm=None):
-        super(TransformerEncoder, self).__init__()
+        super(StarTransformerEncoder, self).__init__()
         self.layers = _get_clones(encoder_layer, num_layers)
         self.num_layers = num_layers
         self.norm = norm
         
-    def forward(self, src, mask=None, src_key_padding_mask=None):
+    def forward(self, src, rly):
         r"""Pass the input through the encoder layers in turn.
 
         Args:
@@ -226,19 +227,28 @@ class TransformerEncoder(nn.Module):
             see the docs in Transformer class.
         """
         output = src
-
+        emb = src
+        rly = src.mean(0, keepdim=True)
+        
         for i in range(self.num_layers):
-            output = self.layers[i](output, src_mask=mask,
-                                    src_key_padding_mask=src_key_padding_mask)
+            output, rly = self.layers[i](output, emb, rly)
 
-        if self.norm:
-            output = self.norm(output)
+#        if self.norm:
+#            output = self.norm(output)
 
-        return output    
+        return output, rly
         
 if __name__ == '__main__':
     #               L, B, D
     x = torch.ones([3, 4, 5])
     e = torch.ones([3, 4, 5])
-    msa = MultiheadStarAttention(5, 1)
-    x, relay = msa(x, e)
+    r = torch.ones([1, 4, 5])
+#    msa = MultiheadStarAttention(5, 1)
+#    x, relay = msa(x, e)
+    st = StarTransformerLayer(5, 1)
+    ste = StarTransformerEncoder(st, 2)
+    x, r = ste(x, r)    
+#    x, r = st(x, e, r)
+    print(x.shape, r.shape)
+
+    
