@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import copy
 
 
 def _get_activation_fn(activation):
@@ -24,9 +25,9 @@ class MultiheadStarAttention(nn.Module):
         nhead: parallel attention heads.
         dropout: a Dropout layer on attn_output_weights. Default: 0.0.
     ToDo:
-        multihead,
-        dropout,
-        initlize
+        multihead, Finished
+        dropout, Nearly finished
+        mask, TBD
     '''
     def __init__(self, embed_dim, nhead, kdim=None, vdim=None, kernel_size=3, dropout=0.0):
         super(MultiheadStarAttention, self).__init__()
@@ -46,29 +47,31 @@ class MultiheadStarAttention(nn.Module):
         self.dropout = dropout
         self.nhead_kdim, self.nhead_vdim = nhead*self.kdim, nhead*self.vdim
         
+        self.denom = np.sqrt(self.kdim)
         self.q_proj = nn.Linear(self.embed_dim, self.nhead_kdim)
         self.k_proj = nn.Linear(self.embed_dim, self.nhead_kdim)
         self.v_proj = nn.Linear(self.embed_dim, self.nhead_vdim)
         self.o_proj = nn.Linear(self.nhead_vdim, self.embed_dim)
         self.unfold = nn.Unfold(kernel_size=[self.kernel_size, 1], padding=[self.kernel_size//2, 0])
+        self.dropout = nn.Dropout(self.dropout) # where to apply the dropout ?!
         
     def forward(self, x, e, relay=None):
         '''
         args: 
-            x: hidden neurons [ L, B, D ] 
+            x: hidden neurons [ L, B, D ]
             e: embeddings [ L, B, D ] 
             relay: single node [1, B, D]
         '''
         assert x.shape == e.shape, "x and e must be with the same shape"
         L, B, D = x.shape
-        Lr, Br, Dr = relay.shape
-        assert Lr==1, "relay is only one node"
         assert D==self.embed_dim, "d_model mush equal self.embed_dim"
         
         relay = x.mean(0, keepdim=True) if relay==None else relay
-        s = relay.expand(L, -1, -1)
-        e, s = e.unsqueeze(0), s.unsqueeze(0) # e, s : [1,L,B,D]
-        cores = torch.cat([e, s], dim=0)      # cores: [2,L,B,D]
+        Lr, Br, Dr = relay.shape
+        assert Lr==1 and Br==B and Dr==D, "relay is only one node"
+        
+        s = relay.expand(L, -1, -1) #[1,B,D] -> [L,B,D]
+        cores = torch.cat([e.unsqueeze(0), s.unsqueeze(0)], dim=0) # cores: [2,L,B,D]
         
         q, k, v = self.q_proj(x), self.k_proj(x), self.v_proj(x)
         k_c, v_c = self.k_proj(cores), self.v_proj(cores)
@@ -76,14 +79,49 @@ class MultiheadStarAttention(nn.Module):
         
         k_r, v_r = self.k_proj(relay), self.v_proj(relay)
         star = self._star_attn(relay, torch.cat([k, k_r], 0), torch.cat([v, v_r], 0))
-        return self.o_proj(ring), self.o_proj(star)
+        return self.o_proj(self.dropout(ring)), self.o_proj(self.dropout(star))
         
     def _star_attn(self, q, k, v):
         q, k, v = q.permute(1, 0, 2), k.permute(1, 2, 0), v.permute(1, 0, 2)
-        logits = torch.matmul(q, k)/np.sqrt(self.kdim)
+        logits = torch.matmul(q, k)/self.denom
         alphas = F.softmax(logits, -1)
         att = torch.matmul(alphas, v).permute(1, 0, 2)
         return att
+    
+    def _ring_attn(self, q, k, v, k_c, v_c):
+        '''
+        args:
+            q, k, v : [L, B, D]
+            k_c, v_c : [2, L, B, D]
+            in which D = self.nhead * self.kdim
+        '''
+        L, B, _ = q.shape
+        
+        # [L,B,D] -> [L,B,h,Dk]
+        q = q.view(L, B, self.nhead, self.kdim)
+        k = k.view(L, B, self.nhead, self.kdim)
+        v = v.view(L, B, self.nhead, self.vdim)
+        # [L,B,h,Dk] -> [B,h,Dk,L]
+        q, k, v = q.permute(1,2,3,0), k.permute(1,2,3,0), v.permute(1,2,3,0)
+        
+        # [2,L,B,D] -> [2,L,B,h,Dk]
+        k_c = k_c.view(2, L, B, self.nhead, self.kdim)
+        v_c = v_c.view(2, L, B, self.nhead, self.vdim)
+        # [2,L,B,h,Dk] -> [B,h,Dk,2,L]
+        k_c, v_c = k_c.permute(2,3,4,0,1), v_c.permute(2,3,4,0,1)
+        
+        # [B,h,Dk,L] -> [B,h,Dk,1,L]
+        q = q.unsqueeze(-2)
+        # make k, v to be 4-D [B, h*Dk, L, 1], then unfold to [B, kernel_size*D, L] -> [B, D, kernel_size, L]
+        k = self.unfold(k.view(B,self.nhead*self.kdim,L,1)).reshape([B,self.nhead,self.kdim,self.kernel_size,L])
+        v = self.unfold(v.view(B,self.nhead*self.vdim,L,1)).reshape([B,self.nhead,self.vdim,self.kernel_size,L])
+        # append k, v to [B, h, Dk, kernel_size+2, L] @ the kernel_size dim
+        k, v = torch.cat([k, k_c], -2), torch.cat([v, v_c], -2)
+        
+        # [B, h, Dk, L] -> [L, B, D]
+        alphas = F.softmax((q*k).sum(2, keepdim=True)/self.denom, 3)
+        att = (alphas * v).sum(3, keepdim=False).view(B,self.nhead*self.vdim,L).permute(2, 0, 1)
+        return att  
     
     def _ring_attn(self, q, k, v, k_c, v_c):
         # [L,B,D] -> [B,D,L]
