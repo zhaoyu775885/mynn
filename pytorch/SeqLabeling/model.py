@@ -2,11 +2,19 @@ import torch
 import torch.nn as nn
 
 
+def log_sum_exp():
+    pass
+
 class CRF(nn.Module):
-    def __init__(self, nclass):
+    def __init__(self, ntag, sot, eot):
         super(CRF, self).__init__()
-        self.nclass = nclass
-        self.trans_mat = nn.Parameter(torch.rand([self.nclass, self.nclass], requires_grad=True))
+        self.ntag = ntag
+        self.eot = eot
+        self.sot = sot
+
+        self.trans_mat = nn.Parameter(torch.rand([self.ntag, self.ntag], requires_grad=True))
+        self.trans_mat.data[:, self.sot] = -torch.Tensor([float('inf')])
+        self.trans_mat.data[self.eot, :] = -torch.Tensor([float('inf')])
 
     def forward(self, frames):
         for frame in frames:
@@ -14,47 +22,35 @@ class CRF(nn.Module):
             trans_score = None
 
     def path_score(self, emits, tags):
-        # Gives the score of a provided tag sequence
-        score = torch.zeros(1)
-        tags = torch.cat([torch.tensor([self.tag_to_ix[START_TAG]], dtype=torch.long), tags])
-        for i, emit in enumerate(emits):
-            score = score + self.trans_mat[tags[i], tags[i + 1]] + emit[tags[i + 1]]
-        score = score + self.trans_mat[self.tag_to_ix[tags[-1], STOP_TAG]]
+        time_len = emits.shape[0]
+        indices = torch.LongTensor(range(time_len))
+        score = torch.sum(self.trans_mat[tags[:-1], tags[1:]]) + torch.sum(emits[indices, tags])
         return score
 
     def norm_factor(self, emits):
-        # Do the forward algorithm to compute the partition function
-        init_alphas = torch.full((1, self.tagset_size), -10000.)
-        # START_TAG has all of the score.
-        init_alphas[0][self.tag_to_ix[START_TAG]] = 0.
+        time_len = emits.shape[0]
+        fwd = torch.zeros(self.ntag)
+        for i in range(time_len):
+            fwd_expanded = fwd.unsqueeze(1).expand([-1, self.ntag])
+            emit_expanded = emits[i].unsqueeze(0).expand([self.ntag, -1])
+            tmp = fwd_expanded + self.trans_mat + emit_expanded
+            fwd = log_sum_exp(tmp)
+        return 
 
-        # Wrap in a variable so that we will get automatic backprop
-        forward_var = init_alphas
-
-        # Iterate through the sentence
-        for feat in feats:
-            alphas_t = []  # The forward tensors at this timestep
-            for next_tag in range(self.tagset_size):
-                # broadcast the emission score: it is the same regardless of
-                # the previous tag
-                emit_score = feat[next_tag].view(
-                    1, -1).expand(1, self.tagset_size)
-                # the ith entry of trans_score is the score of transitioning to
-                # next_tag from i
-                trans_score = self.transitions[next_tag].view(1, -1)
-                # The ith entry of next_tag_var is the value for the
-                # edge (i -> next_tag) before we do log-sum-exp
-                next_tag_var = forward_var + trans_score + emit_score
-                # The forward variable for this tag is log-sum-exp of all the
-                # scores.
-                alphas_t.append(log_sum_exp(next_tag_var).view(1))
-            forward_var = torch.cat(alphas_t).view(1, -1)
-        terminal_var = forward_var + self.transitions[self.tag_to_ix[STOP_TAG]]
-        alpha = log_sum_exp(terminal_var)
-        return alpha
-
-    def decode(self, x):
-        pass
+    def decode(self, emits):
+        dp_val = torch.zeros([self.ntag, self.ntag], dtype=torch.float)
+        dp_idx = torch.zeros([self.ntag, self.ntag], dtype=torch.long)
+        time_len = emits.shape[0]
+        for i in range(1, time_len):
+            tmp = dp_val[:, i-1].unsqueeze(1).expand([-1, self.ntag])
+            dp_val[:, i], dp_idx[:, i] = torch.max(tmp+self.trans_mat)
+            dp_val[:, i] += emits[i, :]
+        final_val, final_argmax = torch.max(dp_val[:, -1])
+        backtrack = [final_argmax]
+        for i in range(time_len-1, 0, -1):
+            final_argmax = dp_idx[final_argmax, i]
+            backtrack.append(final_argmax)
+        return final_val, backtrack
 
 class RNN_CRF(nn.Module):
     def __init__(self, vocab_size, nemb, nhid, nclass, nlayer=1, bidir=False, dropout=0.2):
