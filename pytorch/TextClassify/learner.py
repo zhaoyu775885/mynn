@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from dataset import Sentiment as Dataset
+from dataset import SST2 as Dataset
 from model import RNN
 import os
 
@@ -31,7 +31,7 @@ class Learner():
         vocab_size = self.dataset.vocab_size
         ninp, nhid, nclass = 300, 512, 2
         # for CNN, RNN and CRNN
-        #self.net = network(vocab_size, ninp, nhid, nclass).to(self.device)
+#        self.net = network(vocab_size, ninp, nhid, nclass).to(self.device)
         # for Transformer and Star-Transformer
         nhead, nlayer = 4, 1
         self.net = network(self.dataset.vocab, ninp, nhead, nhid, nlayer, nclass).to(self.device)        
