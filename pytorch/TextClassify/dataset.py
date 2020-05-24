@@ -117,12 +117,15 @@ class SST2():
         return raw_list
     
 if __name__ == '__main__':
-    data_path = '/home/zhaoyu/Datasets/NLPBasics/sentiment/train.tsv'
-    dataset = Sentiment(data_path)
+    # data_path = '/home/zhaoyu/Datasets/NLPBasics/sentiment/train.tsv'
+    # dataset = Sentiment(data_path)
+    data_path = '/home/zhaoyu/Datasets/NLPBasics/Classification/SST-2/'
+    dataset = SST2(data_path)
     iterator = dataset.build_iterator(1, False)
     print(iterator.train, iterator.sort, iterator.shuffle)
     for i, batch in enumerate(iterator):
-        print(i, batch.Sentiment, dataset.raw(batch.Phrase))
+        print(i, batch.text, dataset.raw(batch.text))
         if i+1==3:
             break
+
         
