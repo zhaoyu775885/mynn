@@ -93,8 +93,8 @@ class ResNet(nn.Module):
         x = self.fc(x)
         return x
 
-def ResNet20():
-    return ResNet(20, 10)
+def ResNet20(n_classes):
+    return ResNet(20, n_classes)
 
 if __name__ == '__main__':
     net = ResNet(20, 10)
