@@ -53,6 +53,7 @@ class Learner():
         pass
 
     def train(self, n_epoch=40):
+        self.net.train()
         for epoch in range(n_epoch):
             print('epoch: ', epoch + 1)
             # batch training within each epoch
@@ -68,7 +69,7 @@ class Learner():
                     time_step = timer() - time_prev
                     lr = self.opt.param_groups[0]['lr']
                     speed = int(100*BATCH_SIZE/time_step)
-                    print(i+1, ': lr={2:.1e} | acc={0: 5.2f} | loss={1:5.3f} | speed={3} pic/s'.format(
+                    print(i+1, ': lr={0:.1e} | acc={1: 5.2f} | loss={2:5.3f} | speed={3} pic/s'.format(
                         lr, accuracy * 100, loss, speed))
                     time_prev = timer()
             self.lr_scheduler.step()
@@ -79,7 +80,6 @@ class Learner():
         print('Finished Training')
 
     def test(self):
-        self.load_model()
         self.net.eval()
         total_accuracy_sum = 0
         total_loss_sum = 0
@@ -94,6 +94,7 @@ class Learner():
         print('acc= {0:.2f}, loss={1:.3f}\n'.format(avg_acc * 100, avg_loss))
 
     def save_model(self, path='./models/models.pth'):
+        # todo: supplement the epoch info
         torch.save(self.net.state_dict(), path)
 
     def load_model(self, path='./models/models.pth'):
