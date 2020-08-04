@@ -40,6 +40,7 @@ class Learner():
 
     def _setup_lr_scheduler(self):
         return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[80, 120, 160], gamma=0.1)
+        # return torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, )
 
     def metrics(self, outputs, labels):
         _, predicted = torch.max(outputs, 1)

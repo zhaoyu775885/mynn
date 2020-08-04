@@ -1,8 +1,6 @@
-from datasets.cifar import Cifar10, Cifar100
+from datasets.cifar import Cifar100
 from nets.resnet import ResNet20
-from nets.resnet_std import resnet20
-from nets.lenet import Lenet
-from learner import Learner
+from learner.learner import Learner
 
 if __name__ == '__main__':
     # specify dataset
