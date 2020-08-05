@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from timeit import default_timer as timer
+from torch.utils.tensorboard import SummaryWriter
 
 BATCH_SIZE = 128
 INIT_LR = 1e-1
@@ -28,6 +29,9 @@ class Learner():
         # setup optimizatizer
         self.opt = self._setup_optimizer()
         self.lr_scheduler = self._setup_lr_scheduler()
+
+        #setup writer
+        self.writer = SummaryWriter('./log/')
 
     def _build_dataloader(self, batch_size, is_train):
         return self.dataset.build_dataloader(batch_size, is_train)
@@ -59,20 +63,34 @@ class Learner():
             print('epoch: ', epoch + 1)
             # batch training within each epoch
             time_prev = timer()
+            epoch_loss = 0
+            epoch_accuracy = 0
+            epoch_samp_count = 0
+            epoch_lr = 0
             for i, data in enumerate(self.trainloader):
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
                 outputs = self.forward(inputs)
                 accuracy, loss = self.metrics(outputs, labels)
+                epoch_loss += loss * labels.size(0)
+                epoch_accuracy += accuracy * labels.size(0)
+                epoch_samp_count += labels.size(0)
+                epoch_lr = self.opt.param_groups[0]['lr']
+
                 self.opt.zero_grad()
                 loss.backward()
                 self.opt.step()
                 if (i + 1) % 100 == 0:
                     time_step = timer() - time_prev
-                    lr = self.opt.param_groups[0]['lr']
                     speed = int(100*BATCH_SIZE/time_step)
                     print(i+1, ': lr={0:.1e} | acc={1: 5.2f} | loss={2:5.3f} | speed={3} pic/s'.format(
-                        lr, accuracy * 100, loss, speed))
+                        epoch_lr, accuracy * 100, loss, speed))
                     time_prev = timer()
+
+            self.writer.add_scalar('Train/lr', epoch_lr, epoch)
+            self.writer.add_scalar('Train/loss', epoch_loss/epoch_samp_count, epoch)
+            self.writer.add_scalar('Train/acc.', epoch_accuracy/epoch_samp_count, epoch)
+            self.writer.flush()
+
             self.lr_scheduler.step()
             if (epoch+1) % 10 == 0:
                 self.save_model()
