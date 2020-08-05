@@ -10,8 +10,12 @@ import torch.nn.functional as F
 cfg = {
     18: [2, 2, 2, 2],
     20: [3, 3, 3],
+    32: [5, 5, 5],
     34: [3, 4, 6, 3],
-    50: [3, 4, 6, 3]
+    50: [3, 4, 6, 3],
+    56: [9, 9, 9],
+    110: [18, 18, 18],
+    164: [27, 27, 27]
 }
 
 def _weights_init(m):
@@ -75,7 +79,7 @@ class ResNet(nn.Module):
         block_list = []
         for i, n_cell in enumerate(self.block_n_cell):
             if i==0:
-                block_list.append(self._block_fn(self.base_n_channel, self.base_n_channel*(2**i), n_cell, 1))
+                block_list.append(self._block_fn(self.base_n_channel, self.base_n_channel, n_cell, 1))
             else:
                 block_list.append(self._block_fn(self.base_n_channel*(2**(i-1)), self.base_n_channel*(2**i), n_cell, 2))
         return nn.ModuleList(block_list)
@@ -95,6 +99,9 @@ class ResNet(nn.Module):
 
 def ResNet20(n_classes):
     return ResNet(20, n_classes)
+
+def ResNet32(n_classes):
+    return ResNet(32, n_classes)
 
 if __name__ == '__main__':
     net = ResNet(20, 10)

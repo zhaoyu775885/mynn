@@ -2,4 +2,5 @@ import torch
 import torch.nn as nn
 
 class PConv(nn.Module):
-    pass
+    def __init__(self):
+        pass
