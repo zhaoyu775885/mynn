@@ -1,5 +1,6 @@
 from datasets.cifar import Cifar100
 from nets.resnet import ResNet20, ResNet32
+from nets.resnet_lite import ResNet20Lite
 from learner.learner import Learner
 
 if __name__ == '__main__':
@@ -9,8 +10,8 @@ if __name__ == '__main__':
     dataset = Cifar100(cifar100)
 
     # specify network model
-    net = ResNet32(n_classes=100)
-    # net = resnet20()
+    net = ResNet20(n_classes=100)
+    # net = ResNet20Lite(n_classes=100)
     # net = Lenet()
 
     # init Leaner
