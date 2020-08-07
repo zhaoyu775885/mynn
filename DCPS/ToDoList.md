@@ -5,4 +5,5 @@
 4. Basic distillation
 5. FLOPs count
 6. probabilistic conv, finished
+7. partially update network
 

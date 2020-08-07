@@ -39,7 +39,7 @@ class ResidualBlock(nn.Module):
     def forward(self, x):
         shortcut = x
         x = F.relu(self.bn0(x))
-        if self.shortcut != None:
+        if self.shortcut is not None:
             shortcut = self.shortcut(x)
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
