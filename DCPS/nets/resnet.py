@@ -31,7 +31,6 @@ class ResidualBlock(nn.Module):
         self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_planes)
         self.conv2 = nn.Conv2d(out_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_planes)
         self.shortcut = None
         if stride != 1 or in_planes != out_planes:
             self.shortcut = nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
@@ -42,7 +41,7 @@ class ResidualBlock(nn.Module):
         if self.shortcut is not None:
             shortcut = self.shortcut(x)
         x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.conv2(x)
         x += shortcut
         return x
 
@@ -60,11 +59,9 @@ class ResNet(nn.Module):
             print('Numer of layers Error: ', n_layer)
             exit(1)
         self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
-        # self.bn0 = nn.BatchNorm2d(self.base_n_channel)
         self.block_n_cell = cfg[n_layer]
         self.block_list = self._block_layers()
         self.bn_1 = nn.BatchNorm2d(self.base_n_channel*(2**(len(self.block_n_cell)-1)))
-        # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.avgpool = nn.AvgPool2d(kernel_size=8)
         self.fc = nn.Linear(self.base_n_channel*(2**(len(self.block_n_cell)-1)), self.n_class)
         self.apply(_weights_init)

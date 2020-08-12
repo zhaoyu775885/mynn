@@ -117,4 +117,19 @@ class DLearner():
         torch.save(self.net.state_dict(), path)
 
     def load_model(self, path='./models/models.pth'):
-        self.net.load_state_dict(torch.load(path))
+        """
+        make sure that the checkpoint on the disk contains all related variables
+        in current network.
+        """
+        disk_state_dict = torch.load(path)
+        try:
+            self.net.load_state_dict(disk_state_dict)
+        except RuntimeError:
+            print('Dismatched models, please check the network.')
+            state_dict = self.net.state_dict()
+            for key in state_dict.keys():
+                state_dict[key] = disk_state_dict[key]
+            self.net.load_state_dict(state_dict)
+
+    def wrapper(self):
+        print(self.net.state_dict)

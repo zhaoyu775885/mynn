@@ -16,6 +16,9 @@ class Dnas(nn.Module):
 TYPE_A = 1
 TYPE_B = 2
 
+# dict for conv and gate
+convbase = {}
+
 class Conv2d(nn.Module):
     def __init__(self, in_planes, out_planes, kernel_size, stride, padding, bias,
                  n_param, split_type=TYPE_A, reuse_gate=None):
@@ -43,7 +46,9 @@ class Conv2d(nn.Module):
         mask = torch.zeros(out_planes, self.n_seg)
         for col in range(self.n_seg):
             mask[:seg_tail_list[col], col] = 1
-        return nn.Parameter(mask, requires_grad=False)
+        # todo: determine whether to register mask
+        return mask
+        # return nn.Parameter(mask, requires_grad=False)
 
     def __init_gate(self, reuse_gate):
         gate = torch.zeros([self.n_seg])
@@ -61,7 +66,6 @@ class Conv2d(nn.Module):
     def forward(self, x, tau=1, searching=False):
         y = self.conv(x)
         prob = self.gumbel_softmax(tau, searching)
-        print(prob)
         pmask = torch.sum(self.mask * prob, dim=1)
         pmask = pmask.view(1, len(pmask), 1, 1)
         return y*pmask
