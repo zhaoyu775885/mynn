@@ -117,7 +117,6 @@ class DLearner():
         torch.save(self.net.state_dict(), path)
 
     def load_model(self, path='./models/models.pth'):
-<<<<<<< HEAD
         """
         make sure that the checkpoint on the disk contains all related variables
         in current network.
@@ -131,9 +130,3 @@ class DLearner():
             for key in state_dict.keys():
                 state_dict[key] = disk_state_dict[key]
             self.net.load_state_dict(state_dict)
-
-    def wrapper(self):
-        print(self.net.state_dict)
-=======
-        self.net.load_state_dict(torch.load(path))
->>>>>>> c04e64ee9ecc618e31762ac9b4a33f07bbbf32bd
