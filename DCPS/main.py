@@ -1,9 +1,17 @@
+<<<<<<< HEAD
 from datasets.cifar import Cifar10, Cifar100
 from nets.resnet import ResNet20, ResNet32
 from nets.resnet_lite_v2 import ResNet20Lite
 from learner.learner import Learner
 from learner.learner_dcps import DLearner
 import torch
+=======
+from datasets.cifar import Cifar100
+from nets.resnet import ResNet20, ResNet32
+from nets.resnet_lite import ResNet20Lite
+from learner.learner import Learner
+from learner.learner_dcps import DLearner
+>>>>>>> c04e64ee9ecc618e31762ac9b4a33f07bbbf32bd
 
 if __name__ == '__main__':
     # specify dataset
