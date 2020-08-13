@@ -7,12 +7,12 @@ from torch.utils.tensorboard import SummaryWriter
 BATCH_SIZE = 128
 INIT_LR = 1e-1
 MOMENTUM = 0.9
-L2_REG = 1e-3
+L2_REG = 4e-4
 
-class Learner():
+class DLearner():
     def __init__(self, Dataset, Net):
         # set device & build dataset
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
         self.dataset = Dataset
         self.net = Net
 
@@ -43,7 +43,7 @@ class Learner():
         return optim.SGD(self.forward.parameters(), lr=INIT_LR, momentum=MOMENTUM, weight_decay=L2_REG)
 
     def _setup_lr_scheduler(self):
-        return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[80, 120, 160], gamma=0.1)
+        return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[80, 120, 160, 180], gamma=0.1)
         # return torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, )
 
     def metrics(self, outputs, labels):
@@ -117,4 +117,16 @@ class Learner():
         torch.save(self.net.state_dict(), path)
 
     def load_model(self, path='./models/models.pth'):
-        self.net.load_state_dict(torch.load(path))
+        """
+        make sure that the checkpoint on the disk contains all related variables
+        in current network.
+        """
+        disk_state_dict = torch.load(path)
+        try:
+            self.net.load_state_dict(disk_state_dict)
+        except RuntimeError:
+            print('Dismatched models, please check the network.')
+            state_dict = self.net.state_dict()
+            for key in state_dict.keys():
+                state_dict[key] = disk_state_dict[key]
+            self.net.load_state_dict(state_dict)

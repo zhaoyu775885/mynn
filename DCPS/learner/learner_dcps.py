@@ -7,12 +7,12 @@ from torch.utils.tensorboard import SummaryWriter
 BATCH_SIZE = 128
 INIT_LR = 1e-1
 MOMENTUM = 0.9
-L2_REG = 5e-4
+L2_REG = 4e-4
 
 class DLearner():
     def __init__(self, Dataset, Net):
         # set device & build dataset
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
         self.dataset = Dataset
         self.net = Net
 
@@ -43,7 +43,7 @@ class DLearner():
         return optim.SGD(self.forward.parameters(), lr=INIT_LR, momentum=MOMENTUM, weight_decay=L2_REG)
 
     def _setup_lr_scheduler(self):
-        return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[80, 120, 160], gamma=0.1)
+        return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[80, 120, 160, 180], gamma=0.1)
         # return torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, )
 
     def metrics(self, outputs, labels):

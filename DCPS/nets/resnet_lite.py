@@ -41,7 +41,7 @@ class ResidualBlockLite(nn.Module):
         self.conv2 = nn.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=1, padding=1, bias=False)
         self.shortcut = None
         if stride != 1 and len(out_planes_list)>2:
-            self.shortcut = nn.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride, bias=False)
+            self.shortcut = nn.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride, padding=0, bias=False)
 
     def cnt_flops(self, x):
         cnt_flops = 0
@@ -83,8 +83,7 @@ class ResNetLite(nn.Module):
         self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
         self.block_n_cell = cfg[n_layer]
         self.block_list = self._block_layers()
-        self.bn_1 = nn.BatchNorm2d(self.base_n_channel*(2**(len(self.block_n_cell)-1)))
-
+        self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1])
         self.avgpool = nn.AvgPool2d(kernel_size=8)
         self.fc = nn.Linear(self.base_n_channel*(2**(len(self.block_n_cell)-1)), self.n_class)
         self.apply(_weights_init)
@@ -115,7 +114,7 @@ class ResNetLite(nn.Module):
                 conv1 = block(conv0)
                 cnt_flops += self
                 conv0 = conv1
-        x = F.relu(self.bn_1(x))
+        x = F.relu(self.bn(x))
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
@@ -126,7 +125,7 @@ class ResNetLite(nn.Module):
         for blocks in self.block_list:
             for block in blocks:
                 x = block(x)
-        x = F.relu(self.bn_1(x))
+        x = F.relu(self.bn(x))
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
