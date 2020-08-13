@@ -6,5 +6,5 @@
 5. FLOPs count
 6. probabilistic conv, finished
 7. partially update network
-8. same mask may lead to diff probability
+8. same mask may lead to diff probability， use prob, finished
 
