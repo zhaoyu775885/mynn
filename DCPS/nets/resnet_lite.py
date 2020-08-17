@@ -22,6 +22,11 @@ def conv_flops(inputs, outputs, kernel_size):
     _, c_out, h_out, w_out = outputs.size()
     return kernel_size*kernel_size*c_in*c_out*h_out*w_out
 
+def fc_flops(inputs, outputs):
+    _, c_in = inputs.size()
+    _, c_out = outputs.size()
+    return c_in*c_out
+
 class ResidualBlockLite(nn.Module):
     '''
     out_planes_list contains the corresponding number of convs.
@@ -45,7 +50,6 @@ class ResidualBlockLite(nn.Module):
 
     def cnt_flops(self, x):
         cnt_flops = 0
-        shortcut = x
         x = F.relu(self.bn0(x))
         if self.shortcut is not None:
             shortcut = self.shortcut(x)
@@ -54,7 +58,6 @@ class ResidualBlockLite(nn.Module):
         cnt_flops += conv_flops(x, conv1, 3)
         conv2 = self.conv2(conv1)
         cnt_flops += conv_flops(conv1, conv2, 3)
-        x = conv2 + shortcut
         return cnt_flops
 
     def forward(self, x):
@@ -76,7 +79,7 @@ class ResNetLite(nn.Module):
         self.channel_lists = channel_lists
         self.base_n_channel = channel_lists[0]
         self.n_class = n_class
-        self.cell_fn = ResidualBlockLite if n_layer < 50 else BottleneckLite
+        self.cell_fn = ResidualBlockLite
         if n_layer not in cfg.keys():
             print('Numer of layers Error: ', n_layer)
             exit(1)
@@ -85,7 +88,7 @@ class ResNetLite(nn.Module):
         self.block_list = self._block_layers()
         self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1])
         self.avgpool = nn.AvgPool2d(kernel_size=8)
-        self.fc = nn.Linear(self.base_n_channel*(2**(len(self.block_n_cell)-1)), self.n_class)
+        self.fc = nn.Linear(channel_lists[-1][-1][-1], self.n_class)
         self.apply(_weights_init)
 
     def _block_fn(self, in_planes, out_planes_lists, n_cell, strides):
@@ -111,14 +114,15 @@ class ResNetLite(nn.Module):
         x = conv0
         for blocks in self.block_list:
             for block in blocks:
-                conv1 = block(conv0)
-                cnt_flops += self
-                conv0 = conv1
+                conv1 = block(x)
+                cnt_flops += block.cnt_flops(x)
+                x = conv1
         x = F.relu(self.bn(x))
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-        x = self.fc(x)
-        return x
+        y = self.fc(x)
+        cnt_flops += fc_flops(x, y)
+        return cnt_flops
 
     def forward(self, x):
         x = self.conv0(x)
@@ -133,3 +137,19 @@ class ResNetLite(nn.Module):
 
 def ResNet20Lite(n_classes):
     return ResNetLite(20, n_classes, channel_list_full)
+
+def ResNet32Lite(n_classes):
+    channel_list_32 = [16,
+                       [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
+                       [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
+                       [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]
+                       ]
+    return ResNetLite(32, n_classes, channel_list_32)
+
+def ResNet56Lite(n_classes):
+    channel_list_56 = [16,
+                       [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
+                       [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
+                       [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]
+                       ]
+    return ResNetLite(56, n_classes, channel_list_56)

@@ -13,12 +13,6 @@ cfg = {
     164: [27, 27, 27]
 }
 
-channel_list_full = [16,
-                     [[16, 16], [16, 16], [16, 16]],
-                     [[32, 32, 32], [32, 32], [32, 32]],
-                     [[64, 64, 64], [64, 64], [64, 64]]
-                     ]
-
 class ResidualBlockLite(nn.Module):
     '''
     out_planes_list contains the corresponding number of convs.
@@ -51,13 +45,17 @@ class ResidualBlockLite(nn.Module):
         prob = reuse_prob
         shortcut = x
         x = F.relu(self.bn0(x))
+        flops_list = []
         if self.shortcut is not None:
-            shortcut, prob = self.shortcut(x, tau, searching)
-        x, p0 = self.conv1(x, tau, searching)
+            shortcut, prob, shortcut_flops = self.shortcut(x, tau, searching, p_in=prob)
+            flops_list.append(shortcut_flops)
+        x, p0, conv1_flops = self.conv1(x, tau, searching, p_in=prob)
+        flops_list.append(conv1_flops)
         x = F.relu(self.bn1(x))
-        x, prob = self.conv2(x, tau, searching, prob)
+        x, prob, conv2_flops = self.conv2(x, tau, searching, reuse_prob=prob, p_in=p0)
+        flops_list.append(conv2_flops)
         x += shortcut
-        return x, prob
+        return x, prob, flops_list
 
 class BottleneckLite(nn.Module):
     pass
@@ -79,7 +77,7 @@ class ResNetLite(nn.Module):
         self.block_list = self._block_layers()
         self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1])
         self.avgpool = nn.AvgPool2d(kernel_size=8)
-        self.fc = nn.Linear(self.base_n_channel*(2**(len(self.block_n_cell)-1)), self.n_class)
+        self.fc = dnas.Linear(channel_lists[-1][-1][-1], self.n_class, dcfg=self.dcfg)
         self.apply(_weights_init)
 
     def _block_fn(self, in_planes, out_planes_lists, n_cell, strides):
@@ -101,16 +99,42 @@ class ResNetLite(nn.Module):
         return nn.ModuleList(block_list)
 
     def forward(self, x, tau=1, searching=False):
-        x, prob = self.conv0(x, tau, searching)
-        for blocks in self.block_list:
+        x, prob, flops = self.conv0(x, tau, searching)
+        flops_list = [flops]
+        for i, blocks in enumerate(self.block_list):
             for block in blocks:
-                x, prob = block(x, tau, searching, prob)
+                x, prob, blk_flops_list = block(x, tau, searching, prob)
+                flops_list += blk_flops_list
         x = F.relu(self.bn(x))
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-        x = self.fc(x)
-        return x
+        x, fc_flops = self.fc(x, p_in=prob)
+        flops_list += [fc_flops]
+        return x, torch.sum(torch.Tensor(flops_list)), flops_list
 
 def ResNet20Lite(n_classes):
     dcfg = dnas.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
-    return ResNetLite(20, n_classes, channel_list_full, dcfg)
+    channel_list_20 = [16,
+                         [[16, 16], [16, 16], [16, 16]],
+                         [[32, 32, 32], [32, 32], [32, 32]],
+                         [[64, 64, 64], [64, 64], [64, 64]]
+                         ]
+    return ResNetLite(20, n_classes, channel_list_20, dcfg)
+
+def ResNet32Lite(n_classes):
+    dcfg = dnas.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
+    channel_list_32 = [16,
+                       [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
+                       [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
+                       [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]
+                       ]
+    return ResNetLite(32, n_classes, channel_list_32, dcfg)
+
+def ResNet56Lite(n_classes):
+    dcfg = dnas.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
+    channel_list_56 = [16,
+                       [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
+                       [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
+                       [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]
+                       ]
+    return ResNetLite(56, n_classes, channel_list_56, dcfg)

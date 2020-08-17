@@ -7,12 +7,12 @@ from torch.utils.tensorboard import SummaryWriter
 BATCH_SIZE = 128
 INIT_LR = 1e-1
 MOMENTUM = 0.9
-L2_REG = 4e-4
+L2_REG = 1e-4
 
 class DLearner():
     def __init__(self, Dataset, Net):
         # set device & build dataset
-        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.dataset = Dataset
         self.net = Net
 
@@ -27,8 +27,10 @@ class DLearner():
         self.criterion = self._loss_fn()
 
         # setup optimizatizer
-        self.opt = self._setup_optimizer()
-        self.lr_scheduler = self._setup_lr_scheduler()
+        self.opt_train = self._setup_optimizer_train()
+        self.opt_search = self._setup_optimizer_search()
+        self.lr_train_scheduler = self._setup_lr_train_scheduler()
+        self.lr_search_scheduler = self._setup_lr_search_scheduler()
 
         #setup writer
         self.writer = SummaryWriter('./log/')
@@ -39,7 +41,7 @@ class DLearner():
     def _loss_fn(self):
         return nn.CrossEntropyLoss()
 
-    def _setup_optimizer(self):
+    def _setup_optimizer_train(self):
         return optim.SGD(self.forward.parameters(), lr=INIT_LR, momentum=MOMENTUM, weight_decay=L2_REG)
 
     def _setup_lr_scheduler(self):
@@ -57,6 +59,14 @@ class DLearner():
         '''future utility'''
         pass
 
+    def cnt_flops(self):
+        flops = 0
+        for i, data in enumerate(self.trainloader):
+            inputs, labels = data[0].to(self.device), data[1].to(self.device)
+            flops = self.forward.cnt_flops(inputs)
+            break
+        return flops
+
     def train(self, n_epoch=40):
         self.net.train()
         for epoch in range(n_epoch):
@@ -69,7 +79,12 @@ class DLearner():
             epoch_lr = 0
             for i, data in enumerate(self.trainloader):
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
-                outputs = self.forward(inputs)
+                outputs, flops, flops_list = self.forward(inputs)
+                print(flops)
+                print()
+                for item in flops_list:
+                    print(item)
+                exit(1)
                 accuracy, loss = self.metrics(outputs, labels)
                 epoch_loss += loss * labels.size(0)
                 epoch_accuracy += accuracy * labels.size(0)
@@ -111,7 +126,7 @@ class DLearner():
         avg_loss = total_loss_sum / len(self.testloader)
         avg_acc = total_accuracy_sum / len(self.testloader)
         print('acc= {0:.2f}, loss={1:.3f}\n'.format(avg_acc * 100, avg_loss))
-
+        
     def save_model(self, path='./models/models.pth'):
         # todo: supplement the epoch info
         torch.save(self.net.state_dict(), path)

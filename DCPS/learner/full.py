@@ -9,7 +9,7 @@ INIT_LR = 1e-1
 MOMENTUM = 0.9
 L2_REG = 4e-4
 
-class DLearner():
+class FullLearner():
     def __init__(self, Dataset, Net):
         # set device & build dataset
         self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')

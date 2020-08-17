@@ -1,7 +1,7 @@
 from datasets.cifar import Cifar10, Cifar100
 from nets.resnet import ResNet20, ResNet32
-from nets.resnet_lite_v2 import ResNet20Lite
-from learner.learner_dcps import DLearner
+from nets.resnet_lite_v2 import ResNet20Lite, ResNet32Lite, ResNet56Lite
+from learner.prune import DLearner
 
 if __name__ == '__main__':
     # specify dataset
@@ -14,13 +14,14 @@ if __name__ == '__main__':
     # net = ResNet20(n_classes=100)
     net = ResNet20Lite(n_classes=100)
 
-    for k, v in net.named_parameters():
-        if 'bn' in k:
-            print(k, v)
+    # for k, v in net.named_parameters():
+    #     if 'bn' in k:
+    #         print(k, v)
 
-    # # init Leaner
-    # learner = DLearner(dataset, net)
-    #
-    # learner.train(n_epoch=200)
+    # init Leaner
+    learner = DLearner(dataset, net)
+    # print(learner.cnt_flops())
+
+    learner.train(n_epoch=200)
     # learner.load_model()
     # learner.test()
