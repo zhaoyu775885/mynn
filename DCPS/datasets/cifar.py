@@ -7,6 +7,7 @@ class Cifar10():
 
     def __init__(self, data_dir):
         self.data_dir = data_dir
+        self.n_class = 10
 
     def build_dataloader(self, batch_size, is_train=True):
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -28,12 +29,13 @@ class Cifar10():
                                                transform=train_transform if is_train else valid_transform)
 
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
-                                                 shuffle=is_train, num_workers=8)
+                                                 shuffle=is_train, num_workers=16)
         return dataloader
 
 class Cifar100():
     def __init__(self, data_dir):
         self.data_dir = data_dir
+        self.n_class = 100
 
     def build_dataloader(self, batch_size, is_train=True):
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -52,7 +54,7 @@ class Cifar100():
                                                transform=train_transform if is_train else valid_transform)
 
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
-                                                 shuffle=is_train, num_workers=8)
+                                                 shuffle=is_train, num_workers=16)
         return dataloader
 
 # def imshow(img):

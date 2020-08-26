@@ -30,7 +30,7 @@ def fc_flops(inputs, outputs):
 class ResidualBlockLite(nn.Module):
     '''
     out_planes_list contains the corresponding number of convs.
-    out_planes_list: [c1, c2, c_shortcut], c2 == c_shortcut
+    out_planes_list: [c_shortcut, c1, c2], c2 == c_shortcut
     if len(out_planes_list) == 2:
         direct shortcut
     elif len(out_planes_list) == 3:
@@ -112,8 +112,8 @@ class ResNetLite(nn.Module):
         conv0 = self.conv0(x)
         cnt_flops += conv_flops(x, conv0, 3)
         x = conv0
-        for blocks in self.block_list:
-            for block in blocks:
+        for i, blocks in enumerate(self.block_list):
+            for j, block in enumerate(blocks):
                 conv1 = block(x)
                 cnt_flops += block.cnt_flops(x)
                 x = conv1
