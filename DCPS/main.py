@@ -24,19 +24,18 @@ if __name__ == '__main__':
         n_class = 100
 
     device = 'cuda:0'
+    teacher_net = ResNet20(n_classes=n_class)
+    teacher = Distiller(dataset, teacher_net, device=device, model_path='./models/6884.pth')
     if not prune_flag:
         if not lite_flag:
             net = ResNet20(n_classes=n_class)
         else:
             net = ResNet20Lite(n_classes=n_class)
-
-        teacher_net = ResNet20(n_classes=n_class)
-        teacher = Distiller(dataset, teacher_net, device=device, model_path='./models/6884.pth')
-
         learner = FullLearner(dataset, net, device=device, teacher=teacher)
         print(learner.cnt_flops())
     else:
-        learner = DcpsLearner(dataset, device=device)
+        net = ResNet20Gated(n_classes=dataset.n_class)
+        learner = DcpsLearner(dataset, net, device=device)
 
     learner.train()
     # learner.load_model()

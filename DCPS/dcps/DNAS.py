@@ -9,7 +9,6 @@ TYPE_B = 2
 
 class DcpConfig():
     def __init__(self, n_param=1, split_type=TYPE_A, reuse_gate=None):
-
         self.n_param = n_param
         self.split_type = split_type
         self.reuse_gate = reuse_gate
