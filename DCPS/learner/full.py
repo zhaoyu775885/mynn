@@ -11,17 +11,18 @@ L2_REG = 5e-4
 
 
 class FullLearner(AbstractLearner):
-    def __init__(self, dataset, net, device='cuda:1', log_path='./log', teacher=None):
-        super(FullLearner, self).__init__(dataset, net, device, log_path, teacher)
+    def __init__(self, dataset, net, device, log_path='./log', teacher=None):
+        super(FullLearner, self).__init__(dataset, net, device, log_path)
 
         self.train_loader = self._build_dataloader(BATCH_SIZE, is_train=True)  # batch_size should be
         self.test_loader = self._build_dataloader(100, is_train=False)  # parameterized
 
-        # setup optimizer
         self.opt = self._setup_optimizer()
         self.lr_scheduler = self._setup_lr_scheduler()
 
-    def _loss_fn(self):
+        self.teacher = teacher
+
+    def _setup_loss_fn(self):
         return nn.CrossEntropyLoss()
 
     def _setup_optimizer(self):
@@ -30,12 +31,12 @@ class FullLearner(AbstractLearner):
     def _setup_lr_scheduler(self):
         return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[100, 150, 200], gamma=0.1)
 
-    def metrics(self, logits, labels, kd=None):
+    def metrics(self, logits, labels, trg_logits=None):
         _, predicted = torch.max(logits, 1)
         correct = (predicted == labels).sum().item()
-        loss = self.criterion(logits, labels)
-        if kd is not None:
-            loss += self.teacher.kd_loss(logits, kd)
+        loss = self.loss_fn(logits, labels)
+        if trg_logits is not None:
+            loss += self.teacher.kd_loss(logits, trg_logits)
         accuracy = correct / labels.size(0)
         return accuracy, loss
 
@@ -47,7 +48,7 @@ class FullLearner(AbstractLearner):
             break
         return flops
 
-    def train(self, n_epoch=40):
+    def train(self, n_epoch=250, save_path='./models/full/model.pth'):
         self.net.train()
         for epoch in range(n_epoch):
 
@@ -56,11 +57,10 @@ class FullLearner(AbstractLearner):
             self.recoder.init({'loss': 0, 'accuracy': 0, 'lr': self.opt.param_groups[0]['lr']})
 
             for i, data in enumerate(self.train_loader):
-
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
                 logits = self.forward(inputs)
-                kd = None if self.teacher is None else self.teacher.infer(inputs)
-                accuracy, loss = self.metrics(logits, labels, kd=kd)
+                trg_logits = None if self.teacher is None else self.teacher.infer(inputs)
+                accuracy, loss = self.metrics(logits, labels, trg_logits)
                 self.recoder.add_info(labels.size(0), {'loss': loss, 'accuracy': accuracy})
 
                 self.opt.zero_grad()
@@ -77,7 +77,7 @@ class FullLearner(AbstractLearner):
             self.lr_scheduler.step()
 
             if (epoch + 1) % 10 == 0:
-                self.save_model()
+                self.save_model(path=save_path)
                 self.test()
                 self.net.train()
         print('Finished Training')
@@ -93,4 +93,4 @@ class FullLearner(AbstractLearner):
             total_loss_sum += loss.item()
         avg_loss = total_loss_sum / len(self.test_loader)
         avg_acc = total_accuracy_sum / len(self.test_loader)
-        print('val:\n, accuracy={0:.2f}%, loss={1:.3f}\n'.format(avg_acc * 100, avg_loss))
+        print('Validation:\naccuracy={0:.2f}%, loss={1:.3f}\n'.format(avg_acc * 100, avg_loss))

@@ -10,7 +10,7 @@ from learner.distiller import Distiller
 
 if __name__ == '__main__':
     cifar100_flag = True
-    prune_flag = True
+    prune_flag = False
     lite_flag = True
 
     # specify dataset
@@ -37,6 +37,7 @@ if __name__ == '__main__':
         net = ResNet20Gated(n_classes=dataset.n_class)
         learner = DcpsLearner(dataset, net, device=device)
 
-    learner.train()
-    # learner.load_model()
-    # learner.test()
+    save_path = './models/full/model.pth'
+    learner.train(save_path=save_path)
+    learner.load_model(path=save_path)
+    learner.test()

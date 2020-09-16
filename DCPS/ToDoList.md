@@ -9,7 +9,7 @@
 8. Done, partially update network
 9. Done, Basic distillation
 10. always report CUDA out of memory error for normal test
-11. clean Learners (full, dcps, distiller, inheritance)
+11. Done, clean Learners (full, dcps, distiller, inheritance)
 12. refine interfaces (train, save or load path, log to text etc.)
 13. BASH run-file and config files
 14. multi-GPU control-flow

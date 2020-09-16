@@ -82,7 +82,7 @@ class DcpsLearner(AbstractLearner):
             self.recoder.init({'loss': 0, 'accuracy': 0, 'lr': self.opt_warmup.param_groups[0]['lr']})
             for i, data in enumerate(self.train_loader):
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
-                outputs, flops, flops_list = self.forward(inputs)
+                outputs, flops, flops_list = self.forward(inputs, tau=1.0, noise=False)
                 accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
                 self.recoder.add_info(labels.size(0), {'loss': loss, 'accuracy': accuracy})
                 self.opt_warmup.zero_grad()
@@ -98,7 +98,7 @@ class DcpsLearner(AbstractLearner):
             self.lr_scheduler_warmup.step()
             if (epoch + 1) % 10 == 0:
                 self.save_model(path=save_path)
-                self.test_dcps()
+                self.test(tau=1.0)
                 self.net.train()
         print('Finished Warming-up')
 
@@ -145,7 +145,7 @@ class DcpsLearner(AbstractLearner):
             self.lr_scheduler_search.step()
             if (epoch + 1) % 10 == 0:
                 self.save_model(path=save_path)
-                self.test_dcps(tau=tau)
+                self.test(tau=tau)
                 display_info(flops_list, prob_list)
         print('Finished Training')
         return tau
@@ -175,6 +175,8 @@ class DcpsLearner(AbstractLearner):
         full_learner = FullLearner(self.dataset, net, device=self.device, teacher=teacher)
         print(full_learner.cnt_flops())
         full_learner.train(n_epoch=n_epoch)
+
+        # todo: save the lite model
 
     def test(self, tau):
         self.net.eval()

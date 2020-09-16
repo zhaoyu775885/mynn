@@ -7,16 +7,16 @@ BATCH_SIZE = 128
 
 
 class AbstractLearner(ABC):
-    def __init__(self, dataset, net, device='cuda:1', log_path='./log', teacher=None):
+    def __init__(self, dataset, net, device, log_path):
         self.dataset = dataset
         self.net = net
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
-        self.teacher = teacher
+        # self.teacher = teacher
 
         self.forward = self.net.to(self.device)
 
         # define loss function
-        self.criterion = self._loss_fn()
+        self.loss_fn = self._setup_loss_fn()
 
         # logs save in text and visualize in tensorboard
         self.recoder = Writer(log_path)
@@ -25,11 +25,11 @@ class AbstractLearner(ABC):
         return self.dataset.build_dataloader(batch_size, is_train)
 
     @abstractmethod
-    def _loss_fn(self):
+    def _setup_loss_fn(self):
         pass
 
     @abstractmethod
-    def metrics(self, logits, labels, kd=None):
+    def _setup_optimizer(self):
         pass
 
     @abstractmethod
@@ -53,9 +53,8 @@ class AbstractLearner(ABC):
         try:
             self.net.load_state_dict(disk_state_dict)
         except RuntimeError:
-            print('Dismatched models, please check the network.')
+            print('load model with conflicts, please check the difference.')
             state_dict = self.net.state_dict()
             for key in state_dict.keys():
                 state_dict[key] = disk_state_dict[key]
             self.net.load_state_dict(state_dict)
-

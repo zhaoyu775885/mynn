@@ -2,7 +2,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 class Writer():
     def __init__(self, path):
-        self.sw = SummaryWriter('./log/')
+        self.sw = SummaryWriter(path)
         self.dict = {}
         self.cnt = 0
 
