@@ -1,7 +1,7 @@
 import torch
 from abc import ABC
 from abc import abstractmethod
-from recoder.writer import Writer
+from utils.writer import Writer
 
 BATCH_SIZE = 128
 
@@ -11,11 +11,8 @@ class AbstractLearner(ABC):
         self.dataset = dataset
         self.net = net
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
-        # self.teacher = teacher
 
         self.forward = self.net.to(self.device)
-
-        # define loss function
         self.loss_fn = self._setup_loss_fn()
 
         # logs save in text and visualize in tensorboard

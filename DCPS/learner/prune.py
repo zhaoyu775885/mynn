@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from timeit import default_timer as timer
 from nets.resnet_lite import ResNetLite
-from nets.resnet import ResNet20, ResNet32
-import dcps.DNAS as dnas
+from nets.resnet import ResNet20
 from learner.abstract_learner import AbstractLearner
 from learner.full import FullLearner
 from learner.distiller import Distiller
@@ -157,7 +156,7 @@ class DcpsLearner(AbstractLearner):
         # Done, 1. define the pure small network based on prune info
         # Done, 2. train and validate, exploit the full learner?
         self.load_model(load_path)
-        dcfg = dnas.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
+        dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
         channel_list_20 = [16, [[16, 16], [16, 16], [16, 16]], [[32, 32, 32], [32, 32], [32, 32]],
                            [[64, 64, 64], [64, 64], [64, 64]]]
 
@@ -199,7 +198,7 @@ def get_prune_list(resnet_channel_list, prob_list, dcfg):
     idx = 0
 
     chn_input_full, chn_output_full = 3, resnet_channel_list[0]
-    dnas_conv = lambda input, output: dnas.Conv2d(input, output, 1, 1, 1, False, dcfg=dcfg)
+    dnas_conv = lambda input, output: DNAS.Conv2d(input, output, 1, 1, 1, False, dcfg=dcfg)
     conv = dnas_conv(chn_input_full, chn_output_full)
     chn_output_prune = int(np.ceil(
         min(torch.dot(prob_list[idx], conv.out_plane_list).item(), chn_output_full)
@@ -212,7 +211,7 @@ def get_prune_list(resnet_channel_list, prob_list, dcfg):
         for block in blocks:
             block_prune_list = []
             for chn_output_full in block:
-                conv = dnas.Conv2d(chn_input_full, chn_output_full, 1, 1, 1, False, dcfg=dcfg)
+                conv = DNAS.Conv2d(chn_input_full, chn_output_full, 1, 1, 1, False, dcfg=dcfg)
                 chn_output_prune = int(np.ceil(
                     min(torch.dot(prob_list[idx], conv.out_plane_list).item(), chn_output_full)
                 ))

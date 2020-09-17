@@ -8,7 +8,22 @@ from learner.prune import DcpsLearner
 from learner.full import FullLearner
 from learner.distiller import Distiller
 
+import os
+import torch
+import argparse
+
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+# prepare for parallel training
+
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset', default='cifar10', choices=['cifar10', 'cifar100'], help='Training & Testing')
+    args = parser.parse_args()
+    print(args.dataset)
+
+
+
+    '''
     cifar100_flag = True
     prune_flag = False
     lite_flag = True
@@ -25,7 +40,7 @@ if __name__ == '__main__':
 
     device = 'cuda:0'
     teacher_net = ResNet20(n_classes=n_class)
-    teacher = Distiller(dataset, teacher_net, device=device, model_path='./models/6884.pth')
+    teacher = Distiller(dataset, teacher_net, device=device, model_path='workdir/models/6884.pth')
     if not prune_flag:
         if not lite_flag:
             net = ResNet20(n_classes=n_class)
@@ -37,7 +52,8 @@ if __name__ == '__main__':
         net = ResNet20Gated(n_classes=dataset.n_class)
         learner = DcpsLearner(dataset, net, device=device)
 
-    save_path = './models/full/model.pth'
+    save_path = 'workdir/models/full/model.pth'
     learner.train(save_path=save_path)
     learner.load_model(path=save_path)
     learner.test()
+    '''

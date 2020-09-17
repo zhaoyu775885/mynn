@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from nets.resnet import _weights_init
 
-import dcps.DNAS as dnas
-
 cfg = {
     20: [3, 3, 3],
     32: [5, 5, 5],
@@ -30,15 +28,15 @@ class ResidualBlockLite(nn.Module):
         self.dcfg = dcfg
         self.dcfg_nonreuse = dcfg.copy()
         self.bn0 = nn.BatchNorm2d(in_planes)
-        self.conv1 = dnas.Conv2d(in_planes, out_planes_1, kernel_size=3, stride=stride, padding=1, bias=False,
+        self.conv1 = DNAS.Conv2d(in_planes, out_planes_1, kernel_size=3, stride=stride, padding=1, bias=False,
                                  dcfg=self.dcfg_nonreuse)
         self.bn1 = nn.BatchNorm2d(out_planes_1)
         self.shortcut = None
         if stride != 1 or len(out_planes_list)>2 or in_planes != out_planes_2:
-            self.shortcut = dnas.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride, padding=0,
+            self.shortcut = DNAS.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride, padding=0,
                                         bias=False, dcfg=self.dcfg_nonreuse)
             self.dcfg.reuse_gate = self.shortcut.gate
-        self.conv2 = dnas.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=1, padding=1, bias=False,
+        self.conv2 = DNAS.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=1, padding=1, bias=False,
                                  dcfg=self.dcfg)
 
     def forward(self, x, tau=1, noise=False, reuse_prob=None):
@@ -76,13 +74,13 @@ class ResNetGated(nn.Module):
         if n_layer not in cfg.keys():
             print('Numer of layers Error: ', n_layer)
             exit(1)
-        self.conv0 = dnas.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False, dcfg=self.dcfg)
+        self.conv0 = DNAS.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False, dcfg=self.dcfg)
         self.dcfg.reuse_gate = self.conv0.gate
         self.block_n_cell = cfg[n_layer]
         self.block_list = self._block_layers()
         self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1])
         self.avgpool = nn.AvgPool2d(kernel_size=8)
-        self.fc = dnas.Linear(channel_lists[-1][-1][-1], self.n_class, dcfg=self.dcfg)
+        self.fc = DNAS.Linear(channel_lists[-1][-1][-1], self.n_class, dcfg=self.dcfg)
         self.apply(_weights_init)
 
     def _block_fn(self, in_planes, out_planes_lists, n_cell, strides):
@@ -121,7 +119,7 @@ class ResNetGated(nn.Module):
         return x, prob_list, torch.sum(torch.stack(flops_list)), flops_list
 
 def ResNet20Gated(n_classes):
-    dcfg = dnas.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
+    dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
     channel_list_20 = [16,
                          [[16, 16], [16, 16], [16, 16]],
                          [[32, 32, 32], [32, 32], [32, 32]],
@@ -130,7 +128,7 @@ def ResNet20Gated(n_classes):
     return ResNetGated(20, n_classes, channel_list_20, dcfg)
 
 def ResNet32Gated(n_classes):
-    dcfg = dnas.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
+    dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
     channel_list_32 = [16,
                        [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
                        [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
@@ -139,7 +137,7 @@ def ResNet32Gated(n_classes):
     return ResNetGated(32, n_classes, channel_list_32, dcfg)
 
 def ResNet56Gated(n_classes):
-    dcfg = dnas.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
+    dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
     channel_list_56 = [16,
                        [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
                        [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
