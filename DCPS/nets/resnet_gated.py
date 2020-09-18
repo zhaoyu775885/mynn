@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from nets.resnet import _weights_init
+import utils.DNAS as DNAS
 
 cfg = {
     20: [3, 3, 3],
@@ -63,9 +64,9 @@ class ResidualBlockLite(nn.Module):
 class BottleneckLite(nn.Module):
     pass
 
-class ResNetGated(nn.Module):
+class ResNet(nn.Module):
     def __init__(self, n_layer, n_class, channel_lists, dcfg):
-        super(ResNetGated, self).__init__()
+        super(ResNet, self).__init__()
         self.channel_lists = channel_lists
         self.base_n_channel = channel_lists[0]
         self.n_class = n_class
@@ -125,7 +126,7 @@ def ResNet20Gated(n_classes):
                          [[32, 32, 32], [32, 32], [32, 32]],
                          [[64, 64, 64], [64, 64], [64, 64]]
                          ]
-    return ResNetGated(20, n_classes, channel_list_20, dcfg)
+    return ResNet(20, n_classes, channel_list_20, dcfg)
 
 def ResNet32Gated(n_classes):
     dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
@@ -134,7 +135,7 @@ def ResNet32Gated(n_classes):
                        [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
                        [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]
                        ]
-    return ResNetGated(32, n_classes, channel_list_32, dcfg)
+    return ResNet(32, n_classes, channel_list_32, dcfg)
 
 def ResNet56Gated(n_classes):
     dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
@@ -143,4 +144,15 @@ def ResNet56Gated(n_classes):
                        [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
                        [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]
                        ]
-    return ResNetGated(56, n_classes, channel_list_56, dcfg)
+    return ResNet(56, n_classes, channel_list_56, dcfg)
+
+def ResNetGated(n_layer, n_class):
+    if n_layer == 20:
+        return ResNet20Gated(n_class)
+    elif n_layer == 32:
+        return ResNet32Gated(n_class)
+    elif n_layer == 56:
+        return ResNet56Gated(n_class)
+    else:
+        assert n_layer in cfg.keys(), 'never meet resnet_{0}'.format(n_layer)
+

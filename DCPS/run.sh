@@ -6,6 +6,7 @@ export CUDA_VISIBLE_DEVICES='0,1'
 
 # select from: ['cifar10', 'cifar100']
 DATASET='cifar100' 
+DATA_PATH='/home/zhaoyu/Datasets/cifar100'
 
 # network model type and index
 NET='resnet'
@@ -13,53 +14,61 @@ NET_INDEX=20
 NET_NAME=${NET}${NET_INDEX}
 
 # training parameters
+NUM_EPOCHS=250
 BATCH_SIZE=128
 STD_BATCH_SIZE=128
 STD_INIT_LR=1e-1
 
 # distillation switch
-DST_FLAG=${TRUE}
+DST_FLAG=${FALSE}
 
 # prune switch
-PRUNE_FLAG=${TRUE}
+PRUNE_FLAG=${FALSE}
 
 BASIC_ARGUMENTS="--dataset ${DATASET}
+                 --data_path ${DATA_PATH}
                  --net ${NET}
-				 --net_index ${NET_INDEX}
+				 --net_index $((NET_INDEX))
+				 --num_epoch $((NUM_EPOCH))
                  --batch_size ${BATCH_SIZE}
 				 --std_batch_size ${BATCH_SIZE}
 				 --std_init_lr ${STD_INIT_LR}"
 
+WORKROOT='workdir'
 # append distillation arguments
-DST_ARGUMENTS="--dst_flag ${DST_FLAG}"
+DST_ARGUMENTS=" --dst_flag ${DST_FLAG} "
 if [ ${DST_FLAG} == ${TRUE} ]; then
 	TEACHER_NET='resnet'
 	TEACHER_NET_INDEX=20
 	DST_TEMPERATURE=4
 	DST_LOSS_WEIGHT=4
-	DST_ARGUMENTS+=" --teacher_net ${TEACHER_NET}
-                     --teacher_net_index ${TEACHER_NET_INDEX}
-                     --dst_temperature ${DST_TEMPERATURE}
-                     --dst_loss_weight ${DST_LOSS_WEIGHT}"
+	TEACHER_DIR=${WORKROOT}/${NET_NAME}/teacher
+	mkdir -p ${TEACHER_DIR}
+	DST_ARGUMENTS+="--teacher_net ${TEACHER_NET}
+                    --teacher_net_index ${TEACHER_NET_INDEX}
+                    --dst_temperature ${DST_TEMPERATURE}
+                    --dst_loss_weight ${DST_LOSS_WEIGHT}
+                    --teacher_dir ${TEACHER_DIR}"
 fi
 
 # append working directories arguments
-WORKROOT='workdir'
 FULL_DIR=${WORKROOT}/${NET_NAME}/full
 LOG_DIR=${WORKROOT}/${NET_NAME}/log
 mkdir -p ${FULL_DIR} ${LOG_DIR}
-DIR_ARGUMENTS="--full_dir ${FULL_DIR} --log_dir ${LOG_DIR}"
+DIR_ARGUMENTS=" --full_dir ${FULL_DIR} --log_dir ${LOG_DIR} "
 if [ ${PRUNE_FLAG} == ${TRUE} ]; then
+	SLIM_DIR=${WORKROOT}/${NET_NAME}/slim
 	SLIM_DIR=${WORKROOT}/${NET_NAME}/slim
 	WARMUP_DIR=${WORKROOT}/${NET_NAME}/warmup
 	SEARCH_DIR=${WORKROOT}/${NET_NAME}/search
-	TEACHER_DIR=${WORKROOT}/${NET_NAME}/teacher
-	mkdir -p ${SLIM_DIR} ${WARMUP_DIR} ${SEARCH_DIR} ${TEACHER_DIR}
-	DIR_ARGUMENTS+=" --slim_dir ${SLIM_DIR}
-	                 --warmup_dir ${WARMUP_DIR}
-	                 --search_dir ${SEARCH_DIR}
-	                 --teacher_dir ${TEACHER_DIR}"
+	mkdir -p ${SLIM_DIR} ${WARMUP_DIR} ${SEARCH_DIR}
+	DIR_ARGUMENTS+="--prune_flag ${PRUNE_FLAG}
+	                --slim_dir ${SLIM_DIR}
+	                --warmup_dir ${WARMUP_DIR}
+	                --search_dir ${SEARCH_DIR}"
 fi
 
-echo ${BASIC_ARGUMENTS} ${DST_ARGUMENTS} ${DIR_ARGUMENTS}
-#python -u main.py ${BASIC_ARGUMENTS} ${DST_ARGUMENT} ${DIR_ARGUMENT}
+BASIC_ARGUMENTS+=${DST_ARGUMENTS}
+BASIC_ARGUMENTS+=${DIR_ARGUMENTS}
+echo python -u main.py ${BASIC_ARGUMENTS}
+python main.py ${BASIC_ARGUMENTS}

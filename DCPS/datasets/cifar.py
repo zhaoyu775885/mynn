@@ -2,6 +2,8 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 
+# todo: merge Cifar10 & Cifar100
+
 class Cifar10():
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 

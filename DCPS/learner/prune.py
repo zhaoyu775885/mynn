@@ -7,6 +7,7 @@ from nets.resnet import ResNet20
 from learner.abstract_learner import AbstractLearner
 from learner.full import FullLearner
 from learner.distiller import Distiller
+import utils.DNAS as DNAS
 
 BATCH_SIZE = 128
 INIT_LR = 1e-1
@@ -15,9 +16,10 @@ L2_REG = 5e-4
 
 
 class DcpsLearner(AbstractLearner):
-    def __init__(self, dataset, net, device='cuda:1', log_path='./log', teacher=None):
-        super(DcpsLearner, self).__init__(dataset, net, device, log_path, teacher)
+    def __init__(self, dataset, net, device, args, teacher=None):
+        super(DcpsLearner, self).__init__(dataset, net, device, args)
 
+        self.args = args
         self.train_loader = self._build_dataloader(BATCH_SIZE, is_train=True)
         self.test_loader = self._build_dataloader(100, is_train=False)
 
@@ -31,8 +33,13 @@ class DcpsLearner(AbstractLearner):
         self.opt_search = self._setup_optimizer_search()
         self.lr_scheduler_search = self._setup_lr_scheduler_search()
 
-    def _loss_fn(self):
+        self.teacher = teacher
+
+    def _setup_loss_fn(self):
         return nn.CrossEntropyLoss()
+
+    def _setup_optimizer(self):
+        pass
 
     def _setup_optimizer_warmup(self):
         vars = [item[1] for item in self.forward.named_parameters() if 'gate' not in item[0]]
@@ -173,7 +180,7 @@ class DcpsLearner(AbstractLearner):
         net = ResNetLite(20, self.dataset.n_class, channel_list_prune)
         full_learner = FullLearner(self.dataset, net, device=self.device, teacher=teacher)
         print(full_learner.cnt_flops())
-        full_learner.train(n_epoch=n_epoch)
+        full_learner.train(n_epoch=n_epoch, save_path=save_path)
 
         # todo: save the lite model
 
@@ -190,7 +197,6 @@ class DcpsLearner(AbstractLearner):
         avg_loss = total_loss_sum / len(self.test_loader)
         avg_acc = total_accuracy_sum / len(self.test_loader)
         print('acc= {0:.2f}, loss={1:.3f}\n'.format(avg_acc * 100, avg_loss))
-
 
 def get_prune_list(resnet_channel_list, prob_list, dcfg):
     import numpy as np
@@ -221,7 +227,6 @@ def get_prune_list(resnet_channel_list, prob_list, dcfg):
             blocks_list.append(block_prune_list)
         prune_list.append(blocks_list)
     return prune_list
-
 
 def display_info(flops_list, prob_list):
     print('=============')
