@@ -21,8 +21,10 @@ def main():
     parser.add_argument('--net_index', default=20, type=int, choices=[20, 32], help='Index')
     parser.add_argument('--num_epoch', default=250, type=int, help='Number of Epochs')
     parser.add_argument('--batch_size', default=128, type=int, help='Batch Size')
+    parser.add_argument('--batch_size_test', default=100, type=int, help='Batch Size for Test')
     parser.add_argument('--std_batch_size', default=128, type=int, help='Norm Batch Size')
     parser.add_argument('--std_init_lr', default=1e-1, type=float, help='Norm Init Lr')
+    parser.add_argument('--momentum', default=0.9, type=float, help='Momentum for SGD')
     parser.add_argument('--dst_flag', default=0, type=int, help='Dst Flag')
     parser.add_argument('--prune_flag', default=0, type=int, help='Prune Flag')
     parser.add_argument('--teacher_net', default='resnet', choices=['resnet'], help='Net')
@@ -46,17 +48,19 @@ def main():
     teacher = None
     if args.dst_flag:
         teacher_net = ResNet(args.teacher_net_index, n_class)
-        teacher = Distiller(dataset, teacher_net, device, args, model_path=args.teacher_dir+'/6884.pth')
+        teacher = Distiller(dataset, teacher_net, device, args, model_path=args.teacher_dir)
 
     if not args.prune_flag:
         net = ResNet(args.net_index, n_class)
         learner = FullLearner(dataset, net, device, args, teacher=teacher)
-        # learner.train(n_epoch=args.num_epoch, save_path=args.full_dir)
-        learner.load_model(os.path.join(args.full_dir, 'model_170.pth'))
+        learner.train(n_epoch=args.num_epoch, save_path=args.full_dir)
+        learner.load_model(args.full_dir)
+        # learner.load_model(os.path.join(args.full_dir, 'model_170.pth'))
         learner.test()
     else:
         net = ResNetGated(args.net_index, n_class)
         learner = DcpsLearner(dataset, net, device, args, teacher=teacher)
+        learner.train(n_epoch=args.num_epoch)
 
 if __name__ == '__main__':
     main()

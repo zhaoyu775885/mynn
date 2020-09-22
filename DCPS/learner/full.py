@@ -5,7 +5,6 @@ from timeit import default_timer as timer
 from learner.abstract_learner import AbstractLearner
 import os
 
-MOMENTUM = 0.9
 L2_REG = 5e-4
 
 
@@ -13,10 +12,11 @@ class FullLearner(AbstractLearner):
     def __init__(self, dataset, net, device, args, teacher=None):
         super(FullLearner, self).__init__(dataset, net, device, args)
         self.batch_size_train = self.args.batch_size
-        self.init_lr = self.batch_size_train / self.args.std_batch_size * self.args.std_init_lr
-        self.batch_size_test = 100
+        self.batch_size_test = self.args.batch_size_test
         self.train_loader = self._build_dataloader(self.batch_size_train, is_train=True)
-        self.test_loader = self._build_dataloader(100, is_train=False)  # parameterized
+        self.test_loader = self._build_dataloader(self.batch_size_test, is_train=False)
+
+        self.init_lr = self.batch_size_train / self.args.std_batch_size * self.args.std_init_lr
         self.opt = self._setup_optimizer()
         self.lr_scheduler = self._setup_lr_scheduler()
         self.teacher = teacher
@@ -25,7 +25,8 @@ class FullLearner(AbstractLearner):
         return nn.CrossEntropyLoss()
 
     def _setup_optimizer(self):
-        return optim.SGD(self.forward.parameters(), lr=self.init_lr, momentum=MOMENTUM, weight_decay=L2_REG)
+        return optim.SGD(self.forward.parameters(), lr=self.init_lr,
+                         momentum=self.args.momentum, weight_decay=L2_REG)
 
     def _setup_lr_scheduler(self):
         return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[100, 150, 200], gamma=0.1)
@@ -49,6 +50,7 @@ class FullLearner(AbstractLearner):
 
     def train(self, n_epoch, save_path='./models/full/model.pth'):
         self.net.train()
+        print(n_epoch)
         for epoch in range(n_epoch):
 
             print('epoch: ', epoch + 1)
@@ -68,7 +70,7 @@ class FullLearner(AbstractLearner):
 
                 if (i + 1) % 100 == 0:
                     time_step = timer() - time_prev
-                    speed = int(100 * self.args.batch_size / time_step)
+                    speed = int(100 * self.batch_size_train / time_step)
                     print(i + 1, ': lr={0:.1e} | acc={1:5.2f} | loss={2:5.2f} | speed={3} pic/s'.format(
                         self.opt.param_groups[0]['lr'], accuracy * 100, loss, speed))
                     time_prev = timer()

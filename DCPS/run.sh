@@ -2,11 +2,11 @@ FALSE=0
 TRUE=1
 
 # assign global devices
-export CUDA_VISIBLE_DEVICES='0,1'
+export CUDA_VISIBLE_DEVICES='1'
 
 # select from: ['cifar10', 'cifar100']
-DATASET='cifar100' 
-DATA_PATH='/home/zhaoyu/Datasets/cifar100'
+DATASET='cifar10'
+DATA_PATH='/home/zhaoyu/Datasets/cifar10'
 
 # network model type and index
 NET='resnet'
@@ -14,7 +14,7 @@ NET_INDEX=20
 NET_NAME=${NET}${NET_INDEX}
 
 # training parameters
-NUM_EPOCHS=250
+NUM_EPOCH=250
 BATCH_SIZE=128
 STD_BATCH_SIZE=128
 STD_INIT_LR=1e-1
@@ -28,11 +28,11 @@ PRUNE_FLAG=${FALSE}
 BASIC_ARGUMENTS="--dataset ${DATASET}
                  --data_path ${DATA_PATH}
                  --net ${NET}
-				 --net_index $((NET_INDEX))
-				 --num_epoch $((NUM_EPOCH))
+                 --net_index $((NET_INDEX))
+                 --num_epoch $((NUM_EPOCH))
                  --batch_size ${BATCH_SIZE}
-				 --std_batch_size ${BATCH_SIZE}
-				 --std_init_lr ${STD_INIT_LR}"
+                 --std_batch_size ${BATCH_SIZE}
+                 --std_init_lr ${STD_INIT_LR}"
 
 WORKROOT='workdir'
 # append distillation arguments

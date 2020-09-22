@@ -8,10 +8,11 @@ from learner.abstract_learner import AbstractLearner
 from learner.full import FullLearner
 from learner.distiller import Distiller
 import utils.DNAS as DNAS
+import os
 
-BATCH_SIZE = 128
-INIT_LR = 1e-1
-MOMENTUM = 0.9
+# BATCH_SIZE = 128
+# INIT_LR = 1e-1
+# MOMENTUM = 0.9
 L2_REG = 5e-4
 
 
@@ -19,10 +20,12 @@ class DcpsLearner(AbstractLearner):
     def __init__(self, dataset, net, device, args, teacher=None):
         super(DcpsLearner, self).__init__(dataset, net, device, args)
 
-        self.args = args
-        self.train_loader = self._build_dataloader(BATCH_SIZE, is_train=True)
-        self.test_loader = self._build_dataloader(100, is_train=False)
+        self.batch_size_train = self.args.batch_size
+        self.batch_size_test = self.args.batch_size_test
+        self.train_loader, self.valid_loader = self._build_dataloader(self.batch_size_train, is_train=True, valid=True)
+        self.test_loader = self._build_dataloader(self.batch_size_test, is_train=False)
 
+        self.init_lr = self.batch_size_train / self.args.std_batch_size * self.args.std_init_lr
         # setup optimizer
         self.opt_warmup = self._setup_optimizer_warmup()
         self.lr_scheduler_warmup = self._setup_lr_scheduler_warmup()
@@ -43,11 +46,11 @@ class DcpsLearner(AbstractLearner):
 
     def _setup_optimizer_warmup(self):
         vars = [item[1] for item in self.forward.named_parameters() if 'gate' not in item[0]]
-        return optim.SGD(vars, lr=INIT_LR, momentum=MOMENTUM, weight_decay=L2_REG)
+        return optim.SGD(vars, lr=self.init_lr, momentum=self.args.momentum, weight_decay=L2_REG)
 
     def _setup_optimizer_train(self):
         vars = [item[1] for item in self.forward.named_parameters() if 'gate' not in item[0]]
-        return optim.SGD(vars, lr=INIT_LR * 0.1, momentum=MOMENTUM, weight_decay=L2_REG)
+        return optim.SGD(vars, lr=self.init_lr*0.1, momentum=self.args.momentum, weight_decay=L2_REG)
 
     def _setup_optimizer_search(self):
         # todo: the risk that ignores the shared gates in the network
@@ -66,21 +69,22 @@ class DcpsLearner(AbstractLearner):
     def metrics(self, outputs, labels, flops=None):
         _, predicted = torch.max(outputs, 1)
         correct = (predicted == labels).sum().item()
-        loss = self.criterion(outputs, labels)
-        loss_with_flops = loss + 3 * torch.log(flops)
+        loss = self.loss_fn(outputs, labels)
+        loss_with_flops = loss + 3*torch.log(flops)
         accuracy = correct / labels.size(0)
         return accuracy, loss, loss_with_flops
 
     def train(self, n_epoch=250):
-        self.train_warmup(n_epoch=150, save_path='./models/warmup/model.pth')
+        # self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
         tau = self.train_search(n_epoch=200,
-                                load_path='./models/warmup/model.pth',
-                                save_path='./models/search/model.pth')
+                                load_path=self.args.warmup_dir,
+                                save_path=self.args.search_dir)
+        # tau = 0.1
         self.train_prune(tau=tau, n_epoch=n_epoch,
-                         load_path='./models/search/model.pth',
-                         save_path='./models/prune/model.pth')
+                         load_path=self.args.search_dir,
+                         save_path=self.args.slim_dir)
 
-    def train_warmup(self, n_epoch=200, save_path='./models/warmup/model.pth'):
+    def train_warmup(self, n_epoch=200, save_path='./models/warmup'):
         self.net.train()
         for epoch in range(n_epoch):
             print('epoch: ', epoch + 1)
@@ -88,7 +92,7 @@ class DcpsLearner(AbstractLearner):
             self.recoder.init({'loss': 0, 'accuracy': 0, 'lr': self.opt_warmup.param_groups[0]['lr']})
             for i, data in enumerate(self.train_loader):
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
-                outputs, flops, flops_list = self.forward(inputs, tau=1.0, noise=False)
+                outputs, _, flops, flops_list = self.forward(inputs, tau=1.0, noise=False)
                 accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
                 self.recoder.add_info(labels.size(0), {'loss': loss, 'accuracy': accuracy})
                 self.opt_warmup.zero_grad()
@@ -96,22 +100,20 @@ class DcpsLearner(AbstractLearner):
                 self.opt_warmup.step()
                 if (i + 1) % 100 == 0:
                     time_step = timer() - time_prev
-                    speed = int(100 * BATCH_SIZE / time_step)
-                    print(i + 1, ': lr={0:.1e} | acc={1: 5.2f} | loss={2:5.3f} | flops={3} | speed={4} pic/s'.format(
+                    speed = int(100 * self.batch_size_train / time_step)
+                    print(i + 1, ': lr={0:.1e} | acc={1:5.2f} | loss={2:5.2f} | flops={3} | speed={4} pic/s'.format(
                         self.opt_warmup.param_groups[0]['lr'], accuracy * 100, loss, flops, speed))
                     time_prev = timer()
             self.recoder.update(epoch)
             self.lr_scheduler_warmup.step()
             if (epoch + 1) % 10 == 0:
-                self.save_model(path=save_path)
+                self.save_model(os.path.join(save_path, 'model_'+str(epoch+1)+'.pth'))
                 self.test(tau=1.0)
                 self.net.train()
         print('Finished Warming-up')
 
-    def train_search(self, n_epoch=200,
-                     load_path='./models/warmup/model.pth',
-                     save_path='./models/search/model.pth'):
-        self.load_model(path=load_path)
+    def train_search(self, n_epoch=200, load_path='./models/warmup', save_path='./models/search'):
+        self.load_model(load_path)
         tau = 1.0
         for epoch in range(n_epoch):
             time_prev = timer()
@@ -140,17 +142,17 @@ class DcpsLearner(AbstractLearner):
                                                        'accuracy': accuracy})
                 if (i + 1) % 100 == 0:
                     time_step = timer() - time_prev
-                    speed = int(100 * BATCH_SIZE / time_step)
+                    speed = int(100 * self.batch_size_train / time_step)
                     print(i + 1,
-                          ': lr={0:.1e} | acc={1: 5.2f} |'.format(self.opt_train.param_groups[0]['lr'], accuracy * 100),
-                          'loss={0:5.3f} | loss_f={1:5.3f} | flops={2} | speed={3} pic/s'.format(
+                          ': lr={0:.1e} | acc={1:5.2f} |'.format(self.opt_train.param_groups[0]['lr'], accuracy * 100),
+                          'loss={0:5.2f} | loss_f={1:5.2f} | flops={2} | speed={3} pic/s'.format(
                               loss, loss_with_flops, flops, speed))
                     time_prev = timer()
             self.recoder.update(epoch)
             self.lr_scheduler_train.step()
             self.lr_scheduler_search.step()
             if (epoch + 1) % 10 == 0:
-                self.save_model(path=save_path)
+                self.save_model(os.path.join(save_path, 'model_' + str(epoch + 1) + '.pth'))
                 self.test(tau=tau)
                 display_info(flops_list, prob_list)
         print('Finished Training')
@@ -174,17 +176,16 @@ class DcpsLearner(AbstractLearner):
         channel_list_prune = get_prune_list(channel_list_20, prob_list, dcfg=dcfg)
         print(channel_list_prune)
         # channel_list_prune = [13, [[9, 13], [9, 13], [16, 13]], [[16, 25, 25], [27, 25], [16, 25]], [[54, 64, 64], [45, 64], [29, 64]]]
+        # teacher_net = ResNet20(n_classes=self.dataset.n_class)
+        # teacher = Distiller(self.dataset, teacher_net, self.device, self.args, model_path='./models/6884.pth')
 
-        teacher_net = ResNet20(n_classes=self.dataset.n_class)
-        teacher = Distiller(self.dataset, teacher_net, device=self.device, model_path='./models/6884.pth')
         net = ResNetLite(20, self.dataset.n_class, channel_list_prune)
-        full_learner = FullLearner(self.dataset, net, device=self.device, teacher=teacher)
+        full_learner = FullLearner(self.dataset, net, device=self.device, args=self.args, teacher=self.teacher)
         print(full_learner.cnt_flops())
         full_learner.train(n_epoch=n_epoch, save_path=save_path)
-
         # todo: save the lite model
 
-    def test(self, tau):
+    def test(self, tau=1.0):
         self.net.eval()
         total_accuracy_sum = 0
         total_loss_sum = 0
