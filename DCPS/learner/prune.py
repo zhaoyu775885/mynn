@@ -8,11 +8,14 @@ from learner.abstract_learner import AbstractLearner
 from learner.full import FullLearner
 from learner.distiller import Distiller
 import utils.DNAS as DNAS
+from utils.DNAS import entropy
 import os
+from itertools import cycle
+
 
 # BATCH_SIZE = 128
 # INIT_LR = 1e-1
-# MOMENTUM = 0.9
+MOMENTUM = 0.9
 L2_REG = 5e-4
 
 
@@ -22,8 +25,8 @@ class DcpsLearner(AbstractLearner):
 
         self.batch_size_train = self.args.batch_size
         self.batch_size_test = self.args.batch_size_test
-        self.train_loader, self.valid_loader = self._build_dataloader(self.batch_size_train, is_train=True, valid=True)
-        self.test_loader = self._build_dataloader(self.batch_size_test, is_train=False)
+        self.train_loader = self._build_dataloader(self.batch_size_train, is_train=True, search=True)
+        self.test_loader = self._build_dataloader(self.batch_size_test, is_train=False, search=True)
 
         self.init_lr = self.batch_size_train / self.args.std_batch_size * self.args.std_init_lr
         # setup optimizer
@@ -50,39 +53,42 @@ class DcpsLearner(AbstractLearner):
 
     def _setup_optimizer_train(self):
         vars = [item[1] for item in self.forward.named_parameters() if 'gate' not in item[0]]
-        return optim.SGD(vars, lr=self.init_lr*0.1, momentum=self.args.momentum, weight_decay=L2_REG)
+        return optim.SGD(vars, lr=self.init_lr*0.1, momentum=MOMENTUM, weight_decay=L2_REG)
 
     def _setup_optimizer_search(self):
-        # todo: the risk that ignores the shared gates in the network
         gates = [item[1] for item in self.forward.named_parameters() if 'gate' in item[0]]
-        return optim.Adam(gates, lr=0.01)
+        return optim.Adam(gates, lr=self.init_lr*0.1)
 
     def _setup_lr_scheduler_warmup(self):
         return torch.optim.lr_scheduler.MultiStepLR(self.opt_warmup, milestones=[100, 150], gamma=0.1)
 
     def _setup_lr_scheduler_train(self):
-        return torch.optim.lr_scheduler.MultiStepLR(self.opt_train, milestones=[50, 100], gamma=0.1)
+        return torch.optim.lr_scheduler.MultiStepLR(self.opt_train, milestones=[100], gamma=0.1)
 
     def _setup_lr_scheduler_search(self):
-        return torch.optim.lr_scheduler.MultiStepLR(self.opt_search, milestones=[50, 100], gamma=0.1)
+        return torch.optim.lr_scheduler.MultiStepLR(self.opt_search, milestones=[100], gamma=0.1)
 
-    def metrics(self, outputs, labels, flops=None):
+    def metrics(self, outputs, labels, flops=None, prob_list=None):
         _, predicted = torch.max(outputs, 1)
         correct = (predicted == labels).sum().item()
         loss = self.loss_fn(outputs, labels)
-        loss_with_flops = loss + 3*torch.log(flops)
+        prob_loss = 0
+        if prob_list is not None:
+            for prob in prob_list:
+                prob_loss += entropy(prob)
+            loss += 0.00*prob_loss
+        loss_with_flops = loss + 0.1*torch.log(flops)
         accuracy = correct / labels.size(0)
         return accuracy, loss, loss_with_flops
 
-    def train(self, n_epoch=250):
-        # self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
-        tau = self.train_search(n_epoch=200,
+    def train(self, n_epoch=250, save_path='./models/slim'):
+        self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
+        tau = self.train_search(n_epoch=150,
                                 load_path=self.args.warmup_dir,
                                 save_path=self.args.search_dir)
-        # tau = 0.1
         self.train_prune(tau=tau, n_epoch=n_epoch,
                          load_path=self.args.search_dir,
-                         save_path=self.args.slim_dir)
+                         save_path=save_path)
 
     def train_warmup(self, n_epoch=200, save_path='./models/warmup'):
         self.net.train()
@@ -112,35 +118,49 @@ class DcpsLearner(AbstractLearner):
                 self.net.train()
         print('Finished Warming-up')
 
-    def train_search(self, n_epoch=200, load_path='./models/warmup', save_path='./models/search'):
+    def train_search(self, n_epoch=100, load_path='./models/warmup', save_path='./models/search'):
         self.load_model(load_path)
-        tau = 1.0
+        self.test(tau=1.0)
+        tau = 10
+        total_iter = n_epoch * len(self.train_loader)
+        current_iter = 0
+
         for epoch in range(n_epoch):
             time_prev = timer()
-            tau = 10 ** (1 - 2 * epoch / (n_epoch - 1))
+            # tau = 10 ** (1 - 2 * epoch / (n_epoch - 1))
             print('epoch: ', epoch + 1, ' tau: ', tau)
             self.recoder.init({'loss': 0, 'loss_f': 0, 'accuracy': 0,
                                'lr': self.opt_train.param_groups[0]['lr'],
                                'tau': tau})
             for i, data in enumerate(self.train_loader):
+                tau = 10 ** (1 - 2.0 * current_iter / (total_iter-1))
+                current_iter += 1
+
+                # optimizing weights with training data
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
-                if i % 2:
-                    self.net.eval()
-                    outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=False)
-                    accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
-                    self.opt_search.zero_grad()
-                    loss_with_flops.backward()
-                    self.opt_search.step()
-                else:
-                    self.net.train()
-                    outputs, _a, flops, _b = self.forward(inputs, tau=tau, noise=True)
-                    accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
-                    self.opt_train.zero_grad()
-                    loss.backward()
-                    self.opt_train.step()
+                self.net.train()
+                outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=True)
+                accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
+                self.opt_train.zero_grad()
+                loss.backward()
+                self.opt_train.step()
+
+                # optimizing gates with searching data
+                inputs, labels = data[2].to(self.device), data[3].to(self.device)
+                self.net.eval()
+                outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=False)
+                accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
+                self.opt_search.zero_grad()
+                loss_with_flops.backward()
+                self.opt_search.step()
+
                 self.recoder.add_info(labels.size(0), {'loss': loss, 'loss_f': loss_with_flops,
                                                        'accuracy': accuracy})
                 if (i + 1) % 100 == 0:
+                    self.net.eval()
+                    inputs, labels = data[2].to(self.device), data[3].to(self.device)
+                    outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=False)
+                    accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
                     time_step = timer() - time_prev
                     speed = int(100 * self.batch_size_train / time_step)
                     print(i + 1,
@@ -151,10 +171,12 @@ class DcpsLearner(AbstractLearner):
             self.recoder.update(epoch)
             self.lr_scheduler_train.step()
             self.lr_scheduler_search.step()
+            if (epoch + 1) % 5 == 0:
+                self.test(tau=tau)
+
             if (epoch + 1) % 10 == 0:
                 self.save_model(os.path.join(save_path, 'model_' + str(epoch + 1) + '.pth'))
-                self.test(tau=tau)
-                display_info(flops_list, prob_list)
+
         print('Finished Training')
         return tau
 
@@ -162,8 +184,8 @@ class DcpsLearner(AbstractLearner):
                     load_path='./models/search/model.pth',
                     save_path='./models/prune/model.pth'):
         # Done, 0. load the searched model and extract the prune info
-        # Done, 1. define the pure small network based on prune info
-        # Done, 2. train and validate, exploit the full learner?
+        # Done, 1. define the slim network based on prune info
+        # Done, 2. train and validate, and exploit the full learner
         self.load_model(load_path)
         dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
         channel_list_20 = [16, [[16, 16], [16, 16], [16, 16]], [[32, 32, 32], [32, 32], [32, 32]],
@@ -173,15 +195,40 @@ class DcpsLearner(AbstractLearner):
         inputs, labels = data[0].to(self.device), data[1].to(self.device)
         self.net.eval()
         outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=False)
+        print('=================')
+        print(tau)
+        for prob in prob_list:
+            for item in prob.tolist():
+                print('{0:.2f}'.format(item), end=' ')
+            print()
+        print('------------------')
+
+        for item in self.forward.named_parameters():
+            # if '0.0.bn0' in item[0] and 'bias' not in item[0]:
+            #     print(item)
+            if 'conv0.conv.weight' in item[0]:
+                print(item[1][:, 0, 0, 0])
+                print(item[1][:, 1, 2, 1])
+
         channel_list_prune = get_prune_list(channel_list_20, prob_list, dcfg=dcfg)
+        # channel_list_prune = [16,
+        #                       [[10, 12, 12], [7, 12], [11, 12]],
+        #                       [[31, 25, 25], [19, 25], [32, 25]],
+        #                       [[39, 43, 43], [61, 43], [41, 43]]]
+
+        # channel_list_prune = [14,
+        #                       [[12, 14], [8, 14], [8, 14]],
+        #                       [[31, 25, 25], [19, 25], [32, 25]],
+        #                       [[39, 43, 43], [61, 43], [41, 43]]]
         print(channel_list_prune)
+        # exit(1)
         # channel_list_prune = [13, [[9, 13], [9, 13], [16, 13]], [[16, 25, 25], [27, 25], [16, 25]], [[54, 64, 64], [45, 64], [29, 64]]]
         # teacher_net = ResNet20(n_classes=self.dataset.n_class)
         # teacher = Distiller(self.dataset, teacher_net, self.device, self.args, model_path='./models/6884.pth')
 
         net = ResNetLite(20, self.dataset.n_class, channel_list_prune)
         full_learner = FullLearner(self.dataset, net, device=self.device, args=self.args, teacher=self.teacher)
-        print(full_learner.cnt_flops())
+        print('FLOPs:', full_learner.cnt_flops())
         full_learner.train(n_epoch=n_epoch, save_path=save_path)
         # todo: save the lite model
 
@@ -192,14 +239,143 @@ class DcpsLearner(AbstractLearner):
         for i, data in enumerate(self.test_loader, 0):
             images, labels = data[0].to(self.device), data[1].to(self.device)
             outputs, prob_list, flops, flops_list = self.forward(images, tau=tau, noise=False)
+            # todo: to be fixed
             accuracy, loss, _ = self.metrics(outputs, labels, flops)
             total_accuracy_sum += accuracy
             total_loss_sum += loss.item()
         avg_loss = total_loss_sum / len(self.test_loader)
         avg_acc = total_accuracy_sum / len(self.test_loader)
-        print('acc= {0:.2f}, loss={1:.3f}\n'.format(avg_acc * 100, avg_loss))
+        print('Validation:\naccuracy={0:.2f}%, loss={1:.3f}\n'.format(avg_acc * 100, avg_loss))
+        display_info(flops_list, prob_list)
+        # print('acc= {0:.2f}, loss={1:.3f}\n'.format(avg_acc * 100, avg_loss))
 
-def get_prune_list(resnet_channel_list, prob_list, dcfg):
+    # def debug(self, n_epoch=100, load_path='./models/warmup', save_path='./models/search'):
+    #     self.load_model(load_path)
+    #     tau = 1
+    #     total_iter = n_epoch * len(self.train_loader)
+    #     current_iter = 0
+    #     self.test(tau=tau)
+    #
+    #     print(self.forward.conv0.conv.weight.shape)
+    #     print(self.forward.conv0.gate)
+    #     print(self.forward.conv0.conv.weight[:, 0, 0, 0])
+    #     # print(self.forward.block_list[0][0].bn0)
+    #     # print(self.forward.block_list[0][0].bn1)
+    #
+    #     data = next(iter(self.test_loader))
+    #
+    #     self.forward.eval()
+    #     inputs, labels = data[0].to(self.device), data[1].to(self.device)
+    #     outputs, prob_list, flops, flops_list, conv0, x_bns = self.forward(inputs, tau=tau, noise=False)
+    #     accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
+    #
+    #     conv0_0 = conv0[0,...]
+    #     conv0_0_bn = x_bns[0][0,...]
+    #
+    #     print(conv0_0.shape)
+    #     print('======')
+    #     print(conv0_0[:, 2, 10])
+    #     print(conv0_0_bn[:, 2, 10])
+    #     print('-----')
+    #
+    #     print('======')
+    #     print(conv0_0[:, 8, 3])
+    #     print(conv0_0_bn[:, 8, 3])
+    #     print('-----')
+    #
+    #
+    #     conv0_1 = conv0[1,...]
+    #     conv0_1_bn = x_bns[0][1,...]
+    #
+    #     print('======')
+    #     print(conv0_1[:, 2, 10])
+    #     print(conv0_1_bn[:, 2, 10])
+    #     print('-----')
+    #
+    #     print('======')
+    #     print(conv0_1[:, 8, 3])
+    #     print(conv0_1_bn[:, 8, 3])
+    #
+    #     print(self.forward.block_list[0][0].bn0.weight)
+    #     print(self.forward.block_list[0][0].bn0.bias)
+    #
+    #     print('-----')
+    #
+    #     '''
+    #
+    #     As can be observed, the batch norm after the convolution will adjust the outputs of the conv,
+    #     using
+    #
+    #     '''
+    #
+    #     exit(1)
+    #
+    #     for epoch in range(n_epoch):
+    #         time_prev = timer()
+    #         # tau = 10 ** (1 - 2 * epoch / (n_epoch - 1))
+    #         print('epoch: ', epoch + 1, ' tau: ', tau)
+    #         self.recoder.init({'loss': 0, 'loss_f': 0, 'accuracy': 0,
+    #                            'lr': self.opt_train.param_groups[0]['lr'],
+    #                            'tau': tau})
+    #         for i, data in enumerate(self.train_loader):
+    #             # tau = 10 ** (1 - 2 * current_iter / (total_iter-1))
+    #             current_iter += 1
+    #
+    #             # optimizing weights with training data
+    #             inputs, labels = data[0].to(self.device), data[1].to(self.device)
+    #             self.net.train()
+    #             outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=False)
+    #             accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
+    #             self.opt_train.zero_grad()
+    #             loss.backward()
+    #             self.opt_train.step()
+    #
+    #             # optimizing gates with searching data
+    #             inputs, labels = data[2].to(self.device), data[3].to(self.device)
+    #             self.net.eval()
+    #             outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=False)
+    #             accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops, prob_list)
+    #             self.opt_search.zero_grad()
+    #             loss_with_flops.backward()
+    #             self.opt_search.step()
+    #
+    #             self.recoder.add_info(labels.size(0), {'loss': loss, 'loss_f': loss_with_flops,
+    #                                                    'accuracy': accuracy})
+    #             if (i + 1) % 100 == 0:
+    #                 '''
+    #                 # for prob in prob_list:
+    #                 #     for item in prob.tolist():
+    #                 #         print('{0:.2f}'.format(item), end=' ')
+    #                 #     print()
+    #                 #     break
+    #                 # for item in self.forward.named_parameters():
+    #                 #     if '0.0.bn0' in item[0] and 'bias' not in item[0]:
+    #                 #         print(item)
+    #                 '''
+    #                 self.net.eval()
+    #                 inputs, labels = data[2].to(self.device), data[3].to(self.device)
+    #                 outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=False)
+    #                 accuracy, loss, loss_with_flops = self.metrics(outputs, labels, flops)
+    #                 time_step = timer() - time_prev
+    #                 speed = int(100 * self.batch_size_train / time_step)
+    #                 print(i + 1,
+    #                       ': lr={0:.1e} | acc={1:5.2f} |'.format(self.opt_train.param_groups[0]['lr'], accuracy * 100),
+    #                       'loss={0:5.2f} | loss_f={1:5.2f} | flops={2} | speed={3} pic/s'.format(
+    #                           loss, loss_with_flops, flops, speed))
+    #                 time_prev = timer()
+    #                 # self.test(tau=tau)
+    #         self.recoder.update(epoch)
+    #         self.lr_scheduler_train.step()
+    #         self.lr_scheduler_search.step() # adam optimizer do not use multi-step learning rate
+    #         if (epoch + 1) % 10 == 0:
+    #             self.save_model(os.path.join(save_path, 'model_' + str(epoch + 1) + '.pth'))
+    #             self.test(tau=tau)
+    #
+    #     print('Finished Training')
+    #     return tau
+
+
+def get_prune_list(resnet_channel_list, prob_list, dcfg, expand_rate=0.0):
     import numpy as np
     prune_list = []
     idx = 0
@@ -210,6 +386,7 @@ def get_prune_list(resnet_channel_list, prob_list, dcfg):
     chn_output_prune = int(np.ceil(
         min(torch.dot(prob_list[idx], conv.out_plane_list).item(), chn_output_full)
     ))
+    chn_output_prune += int(np.ceil(expand_rate*(chn_output_full-chn_output_prune)))
     prune_list.append(chn_output_prune)
     chn_input_full = chn_output_full
     idx += 1
@@ -222,12 +399,16 @@ def get_prune_list(resnet_channel_list, prob_list, dcfg):
                 chn_output_prune = int(np.ceil(
                     min(torch.dot(prob_list[idx], conv.out_plane_list).item(), chn_output_full)
                 ))
+                chn_output_prune += int(np.ceil(expand_rate*(chn_output_full-chn_output_prune)))
                 block_prune_list.append(chn_output_prune)
                 chn_input_full = chn_output_full
                 idx += 1
             blocks_list.append(block_prune_list)
         prune_list.append(blocks_list)
     return prune_list
+
+
+
 
 def display_info(flops_list, prob_list):
     print('=============')

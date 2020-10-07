@@ -12,6 +12,15 @@ cfg = {
     164: [27, 27, 27]
 }
 
+_BATCH_NORM_DECAY = 0.01
+_EPSILON = 1e-5
+
+'''
+
+This implementation is to weight the convolution after the BN layer.
+
+'''
+
 class ResidualBlockLite(nn.Module):
     '''
     out_planes_list contains the corresponding number of convs.
@@ -28,10 +37,10 @@ class ResidualBlockLite(nn.Module):
         assert dcfg is not None
         self.dcfg = dcfg
         self.dcfg_nonreuse = dcfg.copy()
-        self.bn0 = nn.BatchNorm2d(in_planes)
+        self.bn0 = nn.BatchNorm2d(in_planes, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.conv1 = DNAS.Conv2d(in_planes, out_planes_1, kernel_size=3, stride=stride, padding=1, bias=False,
                                  dcfg=self.dcfg_nonreuse)
-        self.bn1 = nn.BatchNorm2d(out_planes_1)
+        self.bn1 = nn.BatchNorm2d(out_planes_1, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.shortcut = None
         if stride != 1 or len(out_planes_list)>2 or in_planes != out_planes_2:
             self.shortcut = DNAS.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride, padding=0,
@@ -40,26 +49,39 @@ class ResidualBlockLite(nn.Module):
         self.conv2 = DNAS.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=1, padding=1, bias=False,
                                  dcfg=self.dcfg)
 
-    def forward(self, x, tau=1, noise=False, reuse_prob=None):
+    def forward(self, x, tau=1, noise=False, reuse_prob=None, rmask=None):
         prob = reuse_prob
         shortcut = x
-        x = F.relu(self.bn0(x))
-        flops_list = []
-        prob_list = []
+        x = self.bn0(x)
+        x = DNAS.weighted_feature(x, rmask)
+        x = F.relu(x)
+        prob_list, flops_list = [], []
         if self.shortcut is not None:
-            shortcut, prob, shortcut_flops = self.shortcut(x, tau, noise, p_in=prob)
+            shortcut, rmask, prob, shortcut_flops = self.shortcut(x, tau, noise, p_in=prob)
+            # todo: original implementation
+            # shortcut, prob, shortcut_flops = self.shortcut(x, tau, noise, p_in=prob)
             prob_list.append(prob)
             flops_list.append(shortcut_flops)
-        x, p0, conv1_flops = self.conv1(x, tau, noise, p_in=prob)
+        # todo: original implementation
+        # x, p0, conv1_flops = self.conv1(x, tau, noise, p_in=prob)
+        x, rmask_1, p0, conv1_flops = self.conv1(x, tau, noise, p_in=prob)
         prob_list.insert(0, p0)
         flops_list.insert(0, conv1_flops)
-        x = F.relu(self.bn1(x))
-        x, prob, conv2_flops = self.conv2(x, tau, noise, reuse_prob=prob, p_in=p0)
+        x = self.bn1(x)
+        x = DNAS.weighted_feature(x, rmask_1)
+        x = F.relu(x)
+        x, rmask_2, prob, conv2_flops = self.conv2(x, tau, noise, reuse_prob=prob, p_in=p0)
+        # todo: original implementation
+        # x, prob, conv2_flops = self.conv2(x, tau, noise, reuse_prob=prob, p_in=p0)
         prob_list.insert(1, prob)
         flops_list.insert(1, conv2_flops)
         x += shortcut
+        x = DNAS.weighted_feature(x, rmask)
         # todo: the order of prob and flops should correspond to the order of channels
-        return x, prob, prob_list, flops_list
+        # todo: original implementation
+        # return x, prob, prob_list, flops_list
+        return x, rmask_2, prob, prob_list, flops_list
+
 
 class BottleneckLite(nn.Module):
     pass
@@ -79,7 +101,7 @@ class ResNet(nn.Module):
         self.dcfg.reuse_gate = self.conv0.gate
         self.block_n_cell = cfg[n_layer]
         self.block_list = self._block_layers()
-        self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1])
+        self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1], momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.avgpool = nn.AvgPool2d(kernel_size=8)
         self.fc = DNAS.Linear(channel_lists[-1][-1][-1], self.n_class, dcfg=self.dcfg)
         self.apply(_weights_init)
@@ -103,16 +125,22 @@ class ResNet(nn.Module):
         return nn.ModuleList(block_list)
 
     def forward(self, x, tau=1, noise=False):
-        x, prob, flops = self.conv0(x, tau, noise)
-        prob_list = [prob]
-        flops_list = [flops]
+        x, rmask, prob, flops = self.conv0(x, tau, noise)
+        # todo: original implementation
+        # x, prob, flops = self.conv0(x, tau, noise)
+        prob_list, flops_list = [prob], [flops]
         for i, blocks in enumerate(self.block_list):
             for block in blocks:
-                x, prob, blk_prob_list, blk_flops_list = block(x, tau, noise, prob)
-                flops_list += blk_flops_list
+                x, rmask, prob, blk_prob_list, blk_flops_list = block(x, tau, noise, reuse_prob=prob, rmask=rmask)
+                # todo: original implementation
+                # x, prob, blk_prob_list, blk_flops_list = block(x, tau, noise, reuse_prob=prob, rmask=rmask)
                 prob_list += blk_prob_list
+                flops_list += blk_flops_list
                 prob = blk_prob_list[-1]
-        x = F.relu(self.bn(x))
+        x = self.bn(x)
+        x = DNAS.weighted_feature(x, rmask)
+        # todo: original implementation
+        x = F.relu(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x, fc_flops = self.fc(x, p_in=prob)

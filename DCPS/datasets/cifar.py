@@ -1,18 +1,17 @@
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from itertools import cycle
+import datasets.dataset as Dataset
 
-# todo: merge Cifar10 & Cifar100
 
 class Cifar():
-    def __init__(self, dataset_fn, data_dir):
-        self.dataset_fn = dataset_fn
+    def __init__(self, data_dir, dataset_fn_base, dataset_fn_search):
+        self.dataset_fn_base = dataset_fn_base
+        self.dataset_fn_search = dataset_fn_search
         self.data_dir = data_dir
 
-    def build_dataloader(self, batch_size, is_train=True, valid=False):
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
+    def build_dataloader(self, batch_size, is_train=True, valid=False, search=False):
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
         train_transform = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -23,39 +22,51 @@ class Cifar():
         valid_transform = transforms.Compose([transforms.ToTensor(),
                                               normalize])
 
-        dataset = self.dataset_fn(root=self.data_dir,
-                                  train=is_train,
-                                  transform=train_transform if is_train else valid_transform)
+        dataset_fn = self.dataset_fn_search if search else self.dataset_fn_base
+        cifar_dataset = dataset_fn(root=self.data_dir, train=is_train,
+                                   transform=train_transform if is_train else valid_transform)
+
+        print('---------')
+        print(len(cifar_dataset))
 
         if valid:
-            dataset_train, dataset_valid = torch.utils.data.random_split(dataset, [45000, 5000])
-            train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size,
+            dataset_train, dataset_valid = torch.utils.data.random_split(cifar_dataset, [45000, 5000])
+            train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, drop_last=True,
                                                        shuffle=is_train, num_workers=16)
-            valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=batch_size,
+            valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=batch_size, drop_last=True,
                                                        shuffle=is_train, num_workers=16)
             return train_loader, valid_loader
 
-        return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=is_train, num_workers=16)
+        return torch.utils.data.DataLoader(cifar_dataset, batch_size=batch_size, shuffle=is_train, num_workers=16)
+
 
 class Cifar10(Cifar):
     def __init__(self, data_dir):
-        super(Cifar10, self).__init__(torchvision.datasets.CIFAR10, data_dir)
+        super(Cifar10, self).__init__(data_dir,
+                                      dataset_fn_base=torchvision.datasets.CIFAR10,
+                                      dataset_fn_search=Dataset.CIFAR10Search)
         self.n_class = 10
+
 
 class Cifar100(Cifar):
     def __init__(self, data_dir):
-        super(Cifar100, self).__init__(torchvision.datasets.CIFAR100, data_dir)
+        super(Cifar100, self).__init__(data_dir,
+                                       dataset_fn_base=torchvision.datasets.CIFAR100,
+                                       dataset_fn_search=Dataset.CIFAR100Search)
         self.n_class = 100
 
 
 if __name__ == '__main__':
     dataset = '/home/zhaoyu/Datasets/cifar100'
-    dataset = Cifar100(dataset)
+    dataset = Cifar100(dataset, search=True)
 
-    train, valid = dataset.build_dataloader(128, valid=True)
+    train = dataset.build_dataloader(128)
+    print(len(train))
 
-    for i, batch in enumerate(zip(train, cycle(valid))):
-        print(i)
+    for i, batch in enumerate(train):
+        print(len(batch))
+        if i == 0:
+            break
 
 # def imshow(img):
 #     img = img/2 + 0.5

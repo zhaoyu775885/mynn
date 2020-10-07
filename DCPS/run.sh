@@ -5,8 +5,8 @@ TRUE=1
 export CUDA_VISIBLE_DEVICES='1'
 
 # select from: ['cifar10', 'cifar100']
-DATASET='cifar10'
-DATA_PATH='/home/zhaoyu/Datasets/cifar10'
+DATASET='cifar100'
+DATA_PATH='/home/zhaoyu/Datasets/cifar100'
 
 # network model type and index
 NET='resnet'
@@ -14,16 +14,16 @@ NET_INDEX=20
 NET_NAME=${NET}${NET_INDEX}
 
 # training parameters
-NUM_EPOCH=250
-BATCH_SIZE=128
+NUM_EPOCH=210
+BATCH_SIZE=256
 STD_BATCH_SIZE=128
 STD_INIT_LR=1e-1
 
 # distillation switch
-DST_FLAG=${FALSE}
+DST_FLAG=${TRUE}
 
 # prune switch
-PRUNE_FLAG=${FALSE}
+PRUNE_FLAG=${TRUE}
 
 BASIC_ARGUMENTS="--dataset ${DATASET}
                  --data_path ${DATA_PATH}
@@ -71,4 +71,6 @@ fi
 BASIC_ARGUMENTS+=${DST_ARGUMENTS}
 BASIC_ARGUMENTS+=${DIR_ARGUMENTS}
 echo python -u main.py ${BASIC_ARGUMENTS}
-python main.py ${BASIC_ARGUMENTS}
+TIME_TAG=`date +"%Y%m%d_%H%M"`
+LOG_FILE=${LOG_DIR}/${TIME_TAG}.txt
+python -u main.py ${BASIC_ARGUMENTS} 2>&1 | tee ${LOG_FILE}

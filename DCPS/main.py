@@ -2,8 +2,8 @@ import os
 import sys
 import argparse
 from datasets.cifar import Cifar10, Cifar100
-from nets.resnet import ResNet, ResNet20, ResNet32
-from nets.resnet_lite import ResNet20Lite, ResNet32Lite, ResNet56Lite
+from nets.resnet import ResNet
+# from nets.resnet_lite import ResNet20Lite, ResNet32Lite, ResNet56Lite
 from nets.resnet_gated import ResNetGated
 from learner.prune import DcpsLearner
 from learner.full import FullLearner
@@ -39,9 +39,8 @@ def main():
     parser.add_argument('--teacher_dir', type=str, help='Index')
     args = parser.parse_args()
 
-
-    Dataset = Cifar10 if args.dataset == 'cifar10' else Cifar100
-    dataset = Dataset(args.data_path)
+    dataset_fn = Cifar10 if args.dataset == 'cifar10' else Cifar100
+    dataset = dataset_fn(args.data_path)
     n_class = dataset.n_class
 
     device = 'cuda:0'
@@ -60,7 +59,7 @@ def main():
     else:
         net = ResNetGated(args.net_index, n_class)
         learner = DcpsLearner(dataset, net, device, args, teacher=teacher)
-        learner.train(n_epoch=args.num_epoch)
+        learner.train(n_epoch=args.num_epoch, save_path=args.slim_dir)
 
 if __name__ == '__main__':
     main()

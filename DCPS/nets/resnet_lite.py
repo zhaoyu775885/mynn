@@ -31,17 +31,19 @@ class ResidualBlockLite(nn.Module):
     elif len(out_planes_list) == 3:
         shortcut with conv
     '''
-    def __init__(self, in_planes, out_planes_list, stride=2):
+    def __init__(self, in_planes, out_planes_list, stride=2, project=False):
         super(ResidualBlockLite, self).__init__()
         out_planes_1 = out_planes_list[0]
         out_planes_2 = out_planes_list[1]
         self.bn0 = nn.BatchNorm2d(in_planes)
         self.conv1 = nn.Conv2d(in_planes, out_planes_1, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_planes_1)
-        self.conv2 = nn.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=1, padding=1, bias=False)
         self.shortcut = None
-        if stride != 1 and len(out_planes_list)>2:
-            self.shortcut = nn.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride, padding=0, bias=False)
+        if stride != 1 and len(out_planes_list) > 2:
+        # if project:
+            self.shortcut = nn.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride,
+                                      padding=0, bias=False)
+        self.conv2 = nn.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=1, padding=1, bias=False)
 
     def cnt_flops(self, x):
         cnt_flops = 0
@@ -87,7 +89,7 @@ class ResNetLite(nn.Module):
         self.apply(_weights_init)
 
     def _block_fn(self, in_planes, out_planes_lists, n_cell, strides):
-        blocks = [self.cell_fn(in_planes, out_planes_lists[0], strides)]
+        blocks = [self.cell_fn(in_planes, out_planes_lists[0], strides, project=True)]
         for i in range(1, n_cell):
             blocks.append(self.cell_fn(out_planes_lists[i-1][-1], out_planes_lists[i], 1))
         return nn.ModuleList(blocks)

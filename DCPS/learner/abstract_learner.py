@@ -18,8 +18,8 @@ class AbstractLearner(ABC):
         # logs save in text and visualize in tensorboard
         self.recoder = Writer(self.args.log_dir)
 
-    def _build_dataloader(self, batch_size, is_train, valid):
-        return self.dataset.build_dataloader(batch_size, is_train, valid)
+    def _build_dataloader(self, batch_size, is_train, valid=False, search=False):
+        return self.dataset.build_dataloader(batch_size, is_train, valid, search)
 
     @abstractmethod
     def _setup_loss_fn(self):

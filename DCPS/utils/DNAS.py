@@ -7,6 +7,10 @@ import copy
 TYPE_A = 1
 TYPE_B = 2
 
+def entropy(prob):
+    p = prob*(1-2e-10) + 1e-10
+    return -torch.dot(p, torch.log(p))
+
 class DcpConfig():
     def __init__(self, n_param=1, split_type=TYPE_A, reuse_gate=None):
         self.n_param = n_param
@@ -79,10 +83,12 @@ class Conv2d(nn.Module):
         mask = torch.zeros(self.out_planes, self.n_seg)
         for col in range(self.n_seg):
             mask[:self.out_plane_list[col], col] = 1
-        return nn.Parameter(mask, requires_grad=False)  # todo: determine whether to register mask
+        return nn.Parameter(mask, requires_grad=False)
 
     def __init_gate(self, reuse_gate=None):
-        return nn.Parameter(assign_gate(self.n_seg, reuse_gate=reuse_gate))
+        if reuse_gate is None:
+            return nn.Parameter(assign_gate(self.n_seg, reuse_gate=reuse_gate))
+        return reuse_gate
 
     def __cnt_flops(self, p_in, p_out, out_size):
         h, w = out_size
@@ -96,15 +102,21 @@ class Conv2d(nn.Module):
         if noise:
             uniform_noise = torch.rand(self.n_seg).cuda()
             gumbel_noise = -torch.log(-torch.log(uniform_noise))
-            return F.softmax((self.gate + gumbel_noise) / tau, dim=0)
-        return F.softmax(self.gate / tau, dim=0)
+            return F.softmax((self.gate+gumbel_noise) / tau, dim=0)
+        return F.softmax((self.gate)/tau, dim=0)
 
     def forward(self, x, tau=1, noise=False, reuse_prob=None, p_in=None):
         y = self.conv(x)
         prob = self.__gumbel_softmax(tau, noise) if reuse_prob is None else reuse_prob
         rmask = torch.sum(self.mask * prob, dim=1)
         flops = self.__cnt_flops(p_in, prob, y.shape[2:])
-        return y * rmask.view(1, len(rmask), 1, 1), prob, flops
+        # todo: original implementation
+        # return y * rmask.view(1, len(rmask), 1, 1), prob, flops
+        return y, rmask, prob, flops
+
+
+def weighted_feature(x, rmask):
+    return x * rmask.view(1, len(rmask), 1, 1)
 
 
 class Linear(nn.Module):
@@ -154,7 +166,9 @@ class Linear(nn.Module):
         return nn.Parameter(mask, requires_grad=False)  # todo: determine whether to register mask
 
     def __init_gate(self, reuse_gate=None):
-        return nn.Parameter(assign_gate(self.n_seg, reuse_gate=reuse_gate))
+        if reuse_gate is None:
+            return nn.Parameter(assign_gate(self.n_seg, reuse_gate=reuse_gate))
+        return reuse_gate
 
     def __cnt_flops(self, p_in):
         cin_avg = self.in_features if p_in is None else torch.dot(p_in, self.in_plane_list)
@@ -167,20 +181,27 @@ class Linear(nn.Module):
 
 
 if __name__ == '__main__':
-    gate = torch.Tensor([0, 0, 0, 1000])
-    dcfg = DcpConfig(n_param=4, split_type=TYPE_A, reuse_gate=gate)
-    conv = Conv2d(3, 4, kernel_size=3, stride=1, padding=0, bias=False, dcfg=dcfg)
-    print(conv.mask)
-    print(conv.gate)
+    # gate = torch.Tensor([0, 0, 0, 1000])
+    # dcfg = DcpConfig(n_param=4, split_type=TYPE_A, reuse_gate=gate)
+    # conv = Conv2d(3, 4, kernel_size=3, stride=1, padding=0, bias=False, dcfg=dcfg)
+    # print(conv.mask)
+    # print(conv.gate)
+    #
+    # x = torch.ones([1, 3, 4, 4])
+    # y, gate, flops = conv(x)
+    # print(y)
+    # print(gate)
+    # print(flops)
+    #
+    # for k, v in conv.named_parameters():
+    #     print(k)
 
-    x = torch.ones([1, 3, 4, 4])
-    y, gate, flops = conv(x)
-    print(y)
-    print(gate)
-    print(flops)
-
-    for k, v in conv.named_parameters():
-        print(k)
+    logits = torch.ones(4)
+    print(logits)
+    loss_fn = nn.Softmax()
+    prob = loss_fn(logits)
+    print(prob)
+    print(entropy(prob))
 
     # todo: to be deleted
     # you should be shameful for this awkward loop-based implementation
@@ -206,7 +227,6 @@ if __name__ == '__main__':
     #     c_in, h_in, w_in = in_size
     #     c_out, h_out, w_out = out_size
     #     return self.kernel_size * self.kernel_size * c_in * c_out * h_out * w_out
-
 
     # def __cnt_flops(self, p_in):
     #     if p_in is None:
