@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from timeit import default_timer as timer
-from nets.resnet_lite import ResNetLite
+from nets.resnet_lite import ResNetL
 from nets.resnet import ResNet20
 from learner.abstract_learner import AbstractLearner
 from learner.full import FullLearner
@@ -11,6 +11,7 @@ import utils.DNAS as DNAS
 from utils.DNAS import entropy
 import os
 from itertools import cycle
+from nets.resnet_lite import ResNetChannelList
 
 
 # BATCH_SIZE = 128
@@ -63,10 +64,10 @@ class DcpsLearner(AbstractLearner):
         return torch.optim.lr_scheduler.MultiStepLR(self.opt_warmup, milestones=[100, 150], gamma=0.1)
 
     def _setup_lr_scheduler_train(self):
-        return torch.optim.lr_scheduler.MultiStepLR(self.opt_train, milestones=[100], gamma=0.1)
+        return torch.optim.lr_scheduler.MultiStepLR(self.opt_train, milestones=[50, 100], gamma=0.1)
 
     def _setup_lr_scheduler_search(self):
-        return torch.optim.lr_scheduler.MultiStepLR(self.opt_search, milestones=[100], gamma=0.1)
+        return torch.optim.lr_scheduler.MultiStepLR(self.opt_search, milestones=[50, 100], gamma=0.1)
 
     def metrics(self, outputs, labels, flops=None, prob_list=None):
         _, predicted = torch.max(outputs, 1)
@@ -77,15 +78,23 @@ class DcpsLearner(AbstractLearner):
             for prob in prob_list:
                 prob_loss += entropy(prob)
             loss += 0.00*prob_loss
-        loss_with_flops = loss + 0.1*torch.log(flops)
+        tolerance = 0.02
+        target_flops = 22000000
+        coef = 0.2
+        # if flops < (1 - tolerance) * target_flops:
+        #     coef = -10
+        # elif flops > (1 + tolerance) * target_flops:
+        #     coef = 10
+        loss_with_flops = loss + coef * torch.log(flops)
         accuracy = correct / labels.size(0)
         return accuracy, loss, loss_with_flops
 
     def train(self, n_epoch=250, save_path='./models/slim'):
-        self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
-        tau = self.train_search(n_epoch=150,
-                                load_path=self.args.warmup_dir,
-                                save_path=self.args.search_dir)
+        # self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
+        # tau = self.train_search(n_epoch=150,
+        #                         load_path=self.args.warmup_dir,
+        #                         save_path=self.args.search_dir)
+        tau = 0.1
         self.train_prune(tau=tau, n_epoch=n_epoch,
                          load_path=self.args.search_dir,
                          save_path=save_path)
@@ -188,12 +197,11 @@ class DcpsLearner(AbstractLearner):
         # Done, 2. train and validate, and exploit the full learner
         self.load_model(load_path)
         dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
-        channel_list_20 = [16, [[16, 16], [16, 16], [16, 16]], [[32, 32, 32], [32, 32], [32, 32]],
-                           [[64, 64, 64], [64, 64], [64, 64]]]
+        channel_list = ResNetChannelList(self.args.teacher_net_index)
 
+        self.net.eval()
         data = next(iter(self.train_loader))
         inputs, labels = data[0].to(self.device), data[1].to(self.device)
-        self.net.eval()
         outputs, prob_list, flops, flops_list = self.forward(inputs, tau=tau, noise=False)
         print('=================')
         print(tau)
@@ -210,23 +218,19 @@ class DcpsLearner(AbstractLearner):
                 print(item[1][:, 0, 0, 0])
                 print(item[1][:, 1, 2, 1])
 
-        channel_list_prune = get_prune_list(channel_list_20, prob_list, dcfg=dcfg)
-        # channel_list_prune = [16,
-        #                       [[10, 12, 12], [7, 12], [11, 12]],
-        #                       [[31, 25, 25], [19, 25], [32, 25]],
-        #                       [[39, 43, 43], [61, 43], [41, 43]]]
+        # channel_list_prune = get_prune_list(channel_list, prob_list, dcfg=dcfg)
+        channel_list_prune = [16,
+                              [[10, 12, 12], [7, 12], [11, 12]],
+                              [[31, 25, 25], [19, 25], [32, 25]],
+                              [[39, 43, 43], [61, 43], [41, 43]]]
 
-        # channel_list_prune = [14,
-        #                       [[12, 14], [8, 14], [8, 14]],
-        #                       [[31, 25, 25], [19, 25], [32, 25]],
-        #                       [[39, 43, 43], [61, 43], [41, 43]]]
         print(channel_list_prune)
         # exit(1)
         # channel_list_prune = [13, [[9, 13], [9, 13], [16, 13]], [[16, 25, 25], [27, 25], [16, 25]], [[54, 64, 64], [45, 64], [29, 64]]]
         # teacher_net = ResNet20(n_classes=self.dataset.n_class)
         # teacher = Distiller(self.dataset, teacher_net, self.device, self.args, model_path='./models/6884.pth')
 
-        net = ResNetLite(20, self.dataset.n_class, channel_list_prune)
+        net = ResNetL(20, self.dataset.n_class, channel_list_prune)
         full_learner = FullLearner(self.dataset, net, device=self.device, args=self.args, teacher=self.teacher)
         print('FLOPs:', full_learner.cnt_flops())
         full_learner.train(n_epoch=n_epoch, save_path=save_path)
@@ -383,7 +387,7 @@ def get_prune_list(resnet_channel_list, prob_list, dcfg, expand_rate=0.0):
     chn_input_full, chn_output_full = 3, resnet_channel_list[0]
     dnas_conv = lambda input, output: DNAS.Conv2d(input, output, 1, 1, 1, False, dcfg=dcfg)
     conv = dnas_conv(chn_input_full, chn_output_full)
-    chn_output_prune = int(np.ceil(
+    chn_output_prune = int(np.round(
         min(torch.dot(prob_list[idx], conv.out_plane_list).item(), chn_output_full)
     ))
     chn_output_prune += int(np.ceil(expand_rate*(chn_output_full-chn_output_prune)))
@@ -396,7 +400,8 @@ def get_prune_list(resnet_channel_list, prob_list, dcfg, expand_rate=0.0):
             block_prune_list = []
             for chn_output_full in block:
                 conv = DNAS.Conv2d(chn_input_full, chn_output_full, 1, 1, 1, False, dcfg=dcfg)
-                chn_output_prune = int(np.ceil(
+                print(prob_list[idx], conv.out_plane_list, torch.dot(prob_list[idx], conv.out_plane_list).item())
+                chn_output_prune = int(np.round(
                     min(torch.dot(prob_list[idx], conv.out_plane_list).item(), chn_output_full)
                 ))
                 chn_output_prune += int(np.ceil(expand_rate*(chn_output_full-chn_output_prune)))
@@ -406,8 +411,6 @@ def get_prune_list(resnet_channel_list, prob_list, dcfg, expand_rate=0.0):
             blocks_list.append(block_prune_list)
         prune_list.append(blocks_list)
     return prune_list
-
-
 
 
 def display_info(flops_list, prob_list):

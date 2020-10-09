@@ -3,8 +3,8 @@ import sys
 import argparse
 from datasets.cifar import Cifar10, Cifar100
 from nets.resnet import ResNet
-# from nets.resnet_lite import ResNet20Lite, ResNet32Lite, ResNet56Lite
 from nets.resnet_gated import ResNetGated
+from nets.resnet_lite import ResNetLite
 from learner.prune import DcpsLearner
 from learner.full import FullLearner
 from learner.distiller import Distiller
@@ -18,7 +18,7 @@ def main():
     parser.add_argument('--dataset', default='cifar100', choices=['cifar10', 'cifar100'], help='Dataset Name')
     parser.add_argument('--data_path', type=str, help='Dataset Directory')
     parser.add_argument('--net', default='resnet', choices=['resnet', 'mobilenet'], help='Net')
-    parser.add_argument('--net_index', default=20, type=int, choices=[20, 32], help='Index')
+    parser.add_argument('--net_index', default=20, type=int, choices=[20, 32, 56], help='Index')
     parser.add_argument('--num_epoch', default=250, type=int, help='Number of Epochs')
     parser.add_argument('--batch_size', default=128, type=int, help='Batch Size')
     parser.add_argument('--batch_size_test', default=100, type=int, help='Batch Size for Test')

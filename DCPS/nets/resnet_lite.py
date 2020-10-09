@@ -11,6 +11,8 @@ cfg = {
     164: [27, 27, 27]
 }
 
+_BATCH_NORM_DECAY = 0.01
+_EPSILON = 1e-5
 
 def conv_flops(inputs, outputs, kernel_size):
     _, c_in, h_in, w_in = inputs.size()
@@ -35,12 +37,12 @@ class ResidualBlockLite(nn.Module):
         super(ResidualBlockLite, self).__init__()
         out_planes_1 = out_planes_list[0]
         out_planes_2 = out_planes_list[1]
-        self.bn0 = nn.BatchNorm2d(in_planes)
+        self.bn0 = nn.BatchNorm2d(in_planes, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.conv1 = nn.Conv2d(in_planes, out_planes_1, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(out_planes_1)
+        self.bn1 = nn.BatchNorm2d(out_planes_1, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.shortcut = None
-        if stride != 1 and len(out_planes_list) > 2:
-        # if project:
+        # if stride != 1 and len(out_planes_list) > 2:
+        if project:
             self.shortcut = nn.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride,
                                       padding=0, bias=False)
         self.conv2 = nn.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=1, padding=1, bias=False)
@@ -70,9 +72,9 @@ class ResidualBlockLite(nn.Module):
 class BottleneckLite(nn.Module):
     pass
 
-class ResNetLite(nn.Module):
+class ResNetL(nn.Module):
     def __init__(self, n_layer, n_class, channel_lists):
-        super(ResNetLite, self).__init__()
+        super(ResNetL, self).__init__()
         self.channel_lists = channel_lists
         self.base_n_channel = channel_lists[0]
         self.n_class = n_class
@@ -83,7 +85,7 @@ class ResNetLite(nn.Module):
         self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
         self.block_n_cell = cfg[n_layer]
         self.block_list = self._block_layers()
-        self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1])
+        self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1], momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.avgpool = nn.AvgPool2d(kernel_size=8)
         self.fc = nn.Linear(channel_lists[-1][-1][-1], self.n_class)
         self.apply(_weights_init)
@@ -132,23 +134,42 @@ class ResNetLite(nn.Module):
         x = self.fc(x)
         return x
 
+
+def ResNetChannelList(n_layer):
+    if n_layer == 20:
+        return [16, [[16, 16, 16], [16, 16], [16, 16]],
+                [[32, 32, 32], [32, 32], [32, 32]],
+                [[64, 64, 64], [64, 64], [64, 64]]]
+    elif n_layer == 32:
+        return [16, [[16, 16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
+                [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
+                [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]]
+    elif n_layer == 56:
+        return [16, [[16, 16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
+                [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
+                [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]]
+    else:
+        assert n_layer in cfg.keys(), 'never meet resnet_{0}'.format(n_layer)
+
 def ResNet20Lite(n_classes):
-    channel_list_20 = [16,
-                         [[16, 16], [16, 16], [16, 16]],
-                         [[32, 32, 32], [32, 32], [32, 32]],
-                         [[64, 64, 64], [64, 64], [64, 64]]]
-    return ResNetLite(20, n_classes, channel_list_20)
+    channel_list_20 = ResNetChannelList(20)
+    return ResNetL(20, n_classes, channel_list_20)
 
 def ResNet32Lite(n_classes):
-    channel_list_32 = [16,
-                       [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
-                       [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
-                       [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]]
-    return ResNetLite(32, n_classes, channel_list_32)
+    channel_list_32 = ResNetChannelList(32)
+    return ResNetL(32, n_classes, channel_list_32)
 
 def ResNet56Lite(n_classes):
-    channel_list_56 = [16,
-                       [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
-                       [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
-                       [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]]
-    return ResNetLite(56, n_classes, channel_list_56)
+    channel_list_56 = ResNetChannelList(56)
+    return ResNetL(56, n_classes, channel_list_56)
+
+
+def ResNetLite(n_layer, n_class):
+    if n_layer == 20:
+        return ResNet20Lite(n_class)
+    elif n_layer == 32:
+        return ResNet32Lite(n_class)
+    elif n_layer == 56:
+        return ResNet56Lite(n_class)
+    else:
+        assert n_layer in cfg.keys(), 'never meet resnet_{0}'.format(n_layer)

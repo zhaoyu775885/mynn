@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from nets.resnet import _weights_init
 import utils.DNAS as DNAS
+from nets.resnet import _weights_init
+from nets.resnet_lite import ResNetChannelList
 
 cfg = {
     20: [3, 3, 3],
@@ -30,7 +31,7 @@ class ResidualBlockLite(nn.Module):
     elif len(out_planes_list) == 3:
         shortcut with conv
     '''
-    def __init__(self, in_planes, out_planes_list, stride=2, dcfg=None):
+    def __init__(self, in_planes, out_planes_list, stride=2, project=False, dcfg=None):
         super(ResidualBlockLite, self).__init__()
         out_planes_1 = out_planes_list[0]
         out_planes_2 = out_planes_list[1]
@@ -42,7 +43,8 @@ class ResidualBlockLite(nn.Module):
                                  dcfg=self.dcfg_nonreuse)
         self.bn1 = nn.BatchNorm2d(out_planes_1, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.shortcut = None
-        if stride != 1 or len(out_planes_list)>2 or in_planes != out_planes_2:
+        # if stride != 1 or len(out_planes_list)>2 or in_planes != out_planes_2:
+        if project:
             self.shortcut = DNAS.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride, padding=0,
                                         bias=False, dcfg=self.dcfg_nonreuse)
             self.dcfg.reuse_gate = self.shortcut.gate
@@ -107,9 +109,9 @@ class ResNet(nn.Module):
         self.apply(_weights_init)
 
     def _block_fn(self, in_planes, out_planes_lists, n_cell, strides):
-        blocks = [self.cell_fn(in_planes, out_planes_lists[0], strides, self.dcfg)]
+        blocks = [self.cell_fn(in_planes, out_planes_lists[0], strides, project=True, dcfg=self.dcfg)]
         for i in range(1, n_cell):
-            blocks.append(self.cell_fn(out_planes_lists[i-1][-1], out_planes_lists[i], 1, self.dcfg))
+            blocks.append(self.cell_fn(out_planes_lists[i-1][-1], out_planes_lists[i], 1, dcfg=self.dcfg))
         return nn.ModuleList(blocks)
 
     def _block_layers(self):
@@ -149,29 +151,17 @@ class ResNet(nn.Module):
 
 def ResNet20Gated(n_classes):
     dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
-    channel_list_20 = [16,
-                         [[16, 16], [16, 16], [16, 16]],
-                         [[32, 32, 32], [32, 32], [32, 32]],
-                         [[64, 64, 64], [64, 64], [64, 64]]
-                         ]
+    channel_list_20 = ResNetChannelList(20)
     return ResNet(20, n_classes, channel_list_20, dcfg)
 
 def ResNet32Gated(n_classes):
     dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
-    channel_list_32 = [16,
-                       [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
-                       [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
-                       [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]
-                       ]
+    channel_list_32 = ResNetChannelList(32)
     return ResNet(32, n_classes, channel_list_32, dcfg)
 
 def ResNet56Gated(n_classes):
     dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
-    channel_list_56 = [16,
-                       [[16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
-                       [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
-                       [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]
-                       ]
+    channel_list_56 = ResNetChannelList(56)
     return ResNet(56, n_classes, channel_list_56, dcfg)
 
 def ResNetGated(n_layer, n_class):
