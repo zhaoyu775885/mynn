@@ -3,8 +3,8 @@ import sys
 import argparse
 from datasets.cifar import Cifar10, Cifar100
 from nets.resnet import ResNet
-from nets.resnet_gated import ResNetGated
 from nets.resnet_lite import ResNetLite
+from nets.resnet_gated import ResNetGated
 from learner.prune import DcpsLearner
 from learner.full import FullLearner
 from learner.distiller import Distiller
@@ -54,12 +54,12 @@ def main():
         learner = FullLearner(dataset, net, device, args, teacher=teacher)
         learner.train(n_epoch=args.num_epoch, save_path=args.full_dir)
         learner.load_model(args.full_dir)
-        # learner.load_model(os.path.join(args.full_dir, 'model_170.pth'))
         learner.test()
     else:
         net = ResNetGated(args.net_index, n_class)
         learner = DcpsLearner(dataset, net, device, args, teacher=teacher)
         learner.train(n_epoch=args.num_epoch, save_path=args.slim_dir)
+
 
 if __name__ == '__main__':
     main()

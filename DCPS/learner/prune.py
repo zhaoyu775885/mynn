@@ -78,23 +78,22 @@ class DcpsLearner(AbstractLearner):
             for prob in prob_list:
                 prob_loss += entropy(prob)
             loss += 0.00*prob_loss
-        tolerance = 0.02
-        target_flops = 22000000
+        tolerance = 0.01
+        target_flops = 2150000
         coef = 0.2
-        # if flops < (1 - tolerance) * target_flops:
-        #     coef = -10
-        # elif flops > (1 + tolerance) * target_flops:
-        #     coef = 10
+        if flops < (1 - tolerance) * target_flops:
+            coef = -10
+        elif flops > (1 + tolerance) * target_flops:
+            coef = 10
         loss_with_flops = loss + coef * torch.log(flops)
         accuracy = correct / labels.size(0)
         return accuracy, loss, loss_with_flops
 
     def train(self, n_epoch=250, save_path='./models/slim'):
-        # self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
-        # tau = self.train_search(n_epoch=150,
-        #                         load_path=self.args.warmup_dir,
-        #                         save_path=self.args.search_dir)
-        tau = 0.1
+        self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
+        tau = self.train_search(n_epoch=150,
+                                load_path=self.args.warmup_dir,
+                                save_path=self.args.search_dir)
         self.train_prune(tau=tau, n_epoch=n_epoch,
                          load_path=self.args.search_dir,
                          save_path=save_path)
@@ -218,11 +217,11 @@ class DcpsLearner(AbstractLearner):
                 print(item[1][:, 0, 0, 0])
                 print(item[1][:, 1, 2, 1])
 
-        # channel_list_prune = get_prune_list(channel_list, prob_list, dcfg=dcfg)
-        channel_list_prune = [16,
-                              [[10, 12, 12], [7, 12], [11, 12]],
-                              [[31, 25, 25], [19, 25], [32, 25]],
-                              [[39, 43, 43], [61, 43], [41, 43]]]
+        channel_list_prune = get_prune_list(channel_list, prob_list, dcfg=dcfg)
+        # channel_list_prune = [16,
+        #                       [[10, 12, 12], [7, 12], [11, 12]],
+        #                       [[31, 25, 25], [19, 25], [32, 25]],
+        #                       [[39, 43, 43], [61, 43], [41, 43]]]
 
         print(channel_list_prune)
         # exit(1)
@@ -235,6 +234,7 @@ class DcpsLearner(AbstractLearner):
         print('FLOPs:', full_learner.cnt_flops())
         full_learner.train(n_epoch=n_epoch, save_path=save_path)
         # todo: save the lite model
+        # export all necessary info for slim resnet
 
     def test(self, tau=1.0):
         self.net.eval()
@@ -379,7 +379,7 @@ class DcpsLearner(AbstractLearner):
     #     return tau
 
 
-def get_prune_list(resnet_channel_list, prob_list, dcfg, expand_rate=0.0):
+def get_prune_list(resnet_channel_list, prob_list, dcfg, expand_rate=0.1):
     import numpy as np
     prune_list = []
     idx = 0

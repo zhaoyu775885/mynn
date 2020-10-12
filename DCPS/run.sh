@@ -11,7 +11,7 @@ DATA_PATH='/home/zhaoyu/Datasets/cifar100'
 # network model type and index
 NET='resnet'
 NET_INDEX=20
-NET_NAME=${NET}${NET_INDEX}
+
 
 # training parameters
 NUM_EPOCH=250
@@ -20,10 +20,12 @@ STD_BATCH_SIZE=128
 STD_INIT_LR=1e-1
 
 # distillation switch
-DST_FLAG=${TRUE}
+DST_FLAG=${FALSE}
 
 # prune switch
-PRUNE_FLAG=${TRUE}
+PRUNE_FLAG=${FALSE}
+
+NET_DATASET=${NET}${NET_INDEX}_${DATASET}
 
 BASIC_ARGUMENTS="--dataset ${DATASET}
                  --data_path ${DATA_PATH}
@@ -40,9 +42,9 @@ DST_ARGUMENTS=" --dst_flag ${DST_FLAG} "
 if [ ${DST_FLAG} == ${TRUE} ]; then
 	TEACHER_NET='resnet'
 	TEACHER_NET_INDEX=20
-	DST_TEMPERATURE=5
-	DST_LOSS_WEIGHT=5
-	TEACHER_DIR=${WORKROOT}/${NET_NAME}/teacher
+	DST_TEMPERATURE=4
+	DST_LOSS_WEIGHT=4
+	TEACHER_DIR=${WORKROOT}/${NET_DATASET}/teacher
 	mkdir -p ${TEACHER_DIR}
 	DST_ARGUMENTS+="--teacher_net ${TEACHER_NET}
                     --teacher_net_index ${TEACHER_NET_INDEX}
@@ -52,15 +54,15 @@ if [ ${DST_FLAG} == ${TRUE} ]; then
 fi
 
 # append working directories arguments
-FULL_DIR=${WORKROOT}/${NET_NAME}/full
-LOG_DIR=${WORKROOT}/${NET_NAME}/log
+FULL_DIR=${WORKROOT}/${NET_DATASET}/full
+LOG_DIR=${WORKROOT}/${NET_DATASET}/log
 mkdir -p ${FULL_DIR} ${LOG_DIR}
 DIR_ARGUMENTS=" --full_dir ${FULL_DIR} --log_dir ${LOG_DIR} "
 if [ ${PRUNE_FLAG} == ${TRUE} ]; then
-	SLIM_DIR=${WORKROOT}/${NET_NAME}/slim
-	SLIM_DIR=${WORKROOT}/${NET_NAME}/slim
-	WARMUP_DIR=${WORKROOT}/${NET_NAME}/warmup
-	SEARCH_DIR=${WORKROOT}/${NET_NAME}/search
+	SLIM_DIR=${WORKROOT}/${NET_DATASET}/slim
+	SLIM_DIR=${WORKROOT}/${NET_DATASET}/slim
+	WARMUP_DIR=${WORKROOT}/${NET_DATASET}/warmup
+	SEARCH_DIR=${WORKROOT}/${NET_DATASET}/search
 	mkdir -p ${SLIM_DIR} ${WARMUP_DIR} ${SEARCH_DIR}
 	DIR_ARGUMENTS+="--prune_flag ${PRUNE_FLAG}
 	                --slim_dir ${SLIM_DIR}
