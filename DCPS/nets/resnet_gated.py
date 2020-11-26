@@ -84,7 +84,6 @@ class ResidualBlockLite(nn.Module):
         # return x, prob, prob_list, flops_list
         return x, rmask_2, prob, prob_list, flops_list
 
-
 class BottleneckLite(nn.Module):
     pass
 

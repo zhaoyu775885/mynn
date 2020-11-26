@@ -4,8 +4,11 @@ import torch.nn.functional as F
 from nets.resnet import _weights_init
 
 cfg = {
+    18: [2, 2, 2, 2],
     20: [3, 3, 3],
     32: [5, 5, 5],
+    34: [3, 4, 6, 3],
+    50: [3, 4, 6, 3],
     56: [9, 9, 9],
     110: [18, 18, 18],
     164: [27, 27, 27]
@@ -136,7 +139,12 @@ class ResNetL(nn.Module):
 
 
 def ResNetChannelList(n_layer):
-    if n_layer == 20:
+    if n_layer == 18:
+        return [64, [[64, 64, 64], [64, 64]],
+                [[64, 64, 64], [64, 64]],
+                [[64, 64, 64], [64, 64]],
+                [[64, 64, 64], [64, 64]]]
+    elif n_layer == 20:
         return [16, [[16, 16, 16], [16, 16], [16, 16]],
                 [[32, 32, 32], [32, 32], [32, 32]],
                 [[64, 64, 64], [64, 64], [64, 64]]]
@@ -144,12 +152,19 @@ def ResNetChannelList(n_layer):
         return [16, [[16, 16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
                 [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
                 [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]]
+    elif n_layer == 50:
+        return [64, [[]]
+                    ]
     elif n_layer == 56:
         return [16, [[16, 16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
                 [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
                 [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]]
     else:
         assert n_layer in cfg.keys(), 'never meet resnet_{0}'.format(n_layer)
+
+def ResNet18Lite(n_classes):
+    channel_list_18 = ResNetChannelList(18)
+    return ResNetL(18, n_classes, channel_list_18)
 
 def ResNet20Lite(n_classes):
     channel_list_20 = ResNetChannelList(20)
@@ -165,7 +180,9 @@ def ResNet56Lite(n_classes):
 
 
 def ResNetLite(n_layer, n_class):
-    if n_layer == 20:
+    if n_layer == 18:
+        return ResNet18Lite(n_class)
+    elif n_layer == 20:
         return ResNet20Lite(n_class)
     elif n_layer == 32:
         return ResNet32Lite(n_class)
@@ -173,3 +190,8 @@ def ResNetLite(n_layer, n_class):
         return ResNet56Lite(n_class)
     else:
         assert n_layer in cfg.keys(), 'never meet resnet_{0}'.format(n_layer)
+
+
+if __name__ == '__main__':
+    net = ResNetLite(18, 10)
+    print(net)
