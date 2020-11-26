@@ -16,6 +16,7 @@ class FullLearner(AbstractLearner):
         self.train_loader = self._build_dataloader(self.batch_size_train, is_train=True)
         self.test_loader = self._build_dataloader(self.batch_size_test, is_train=False)
 
+        print(self.args.batch_size, self.args.std_batch_size, self.args.std_init_lr)
         self.init_lr = self.batch_size_train / self.args.std_batch_size * self.args.std_init_lr
         self.opt = self._setup_optimizer()
         self.lr_scheduler = self._setup_lr_scheduler()
@@ -29,16 +30,19 @@ class FullLearner(AbstractLearner):
                          momentum=self.args.momentum, weight_decay=L2_REG)
 
     def _setup_lr_scheduler(self):
-        return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[100, 150, 200], gamma=0.1)
+        return torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, T_max=self.args.num_epoch)
+        # return torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[200, 300, 400], gamma=0.1)
 
     def metrics(self, logits, labels, trg_logits=None):
         _, predicted = torch.max(logits, 1)
         correct = (predicted == labels).sum().item()
         loss = self.loss_fn(logits, labels)
-        if trg_logits is not None:
-            loss += self.teacher.kd_loss(logits, trg_logits)
         accuracy = correct / labels.size(0)
-        return accuracy, loss
+        kd_loss = 0
+        if trg_logits is not None:
+            kd_loss = self.teacher.kd_loss(logits, trg_logits)
+            return accuracy, loss+kd_loss, kd_loss
+        return accuracy, loss + kd_loss
 
     def cnt_flops(self):
         flops = 0
@@ -60,8 +64,11 @@ class FullLearner(AbstractLearner):
             for i, data in enumerate(self.train_loader):
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
                 logits = self.forward(inputs)
-                trg_logits = None if self.teacher is None else self.teacher.infer(inputs)
-                accuracy, loss = self.metrics(logits, labels, trg_logits)
+                if self.teacher is None:
+                    accuracy, loss = self.metrics(logits, labels)
+                else:
+                    trg_logits = self.teacher.infer(inputs)
+                    accuracy, loss, kd_loss = self.metrics(logits, labels, trg_logits)
                 self.recoder.add_info(labels.size(0), {'loss': loss, 'accuracy': accuracy})
 
                 self.opt.zero_grad()

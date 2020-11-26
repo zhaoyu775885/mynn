@@ -58,7 +58,7 @@ class Cifar100(Cifar):
 
 if __name__ == '__main__':
     dataset = '/home/zhaoyu/Datasets/cifar100'
-    dataset = Cifar100(dataset, search=True)
+    dataset = Cifar100(dataset)
 
     train = dataset.build_dataloader(128)
     print(len(train))

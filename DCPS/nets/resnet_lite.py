@@ -11,7 +11,7 @@ cfg = {
     164: [27, 27, 27]
 }
 
-_BATCH_NORM_DECAY = 0.01
+_BATCH_NORM_DECAY = 0.1
 _EPSILON = 1e-5
 
 def conv_flops(inputs, outputs, kernel_size):

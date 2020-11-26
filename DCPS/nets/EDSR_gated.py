@@ -11,8 +11,8 @@ import torch.nn as nn
 #from nets.resnet import _weights_init
 
 import math
-import dcps.DNAS as dnas
-from sr_utils import MeanShift
+import utils.DNAS as dnas
+from nets.sr_utils import MeanShift
 
             
 class EDSRBlockGated(nn.Module):
@@ -112,7 +112,7 @@ class EDSRGated(nn.Module):
         return x, prob_list, torch.sum(torch.stack(flops_list)), flops_list
 
 class EDSRLite(nn.Module):
-    def __init__(self, num_blocks, num_planes, channel_list, num_colors = 3, scale = 1, res_scale = 0.1):
+    def __init__(self, num_blocks, num_planes, channel_list, num_colors=3, scale=1, res_scale=0.1):
         super(EDSRLite, self).__init__()
         #self.num_blocks = num_blocks
         self.act = nn.ReLU(inplace=True)
@@ -136,4 +136,53 @@ class EDSRLite(nn.Module):
         x = self.tail(res)
         x = self.add_mean(x)
         return x
-    
+
+
+class ResBlock(nn.Module):
+    def __init__(self, num_chls, res_scale=0.1):
+        super(ResBlock, self).__init__()
+        self.act1 = nn.ReLU(inplace=True)
+        self.conv1 = nn.Conv2d(in_channels=num_chls, out_channels=num_chls, kernel_size=3, stride=1, padding=1, bias=False)
+        self.act2 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(in_channels=num_chls, out_channels=num_chls, kernel_size=3, stride=1, padding=1, bias=False)
+
+        m_body = [self.act1, self.conv1, self.act2, self.conv2]
+        self.body = nn.Sequential(*m_body)
+        self.res_scale = res_scale
+
+    def forward(self, x):
+        res = self.body(x).mul(self.res_scale)
+        res += x
+
+        return res
+
+class EDSR(nn.Module):
+    def __init__(self, num_blocks, num_chls, num_color=3, scale=1, res_scale=0.1):
+        super(EDSR, self).__init__()
+        self.act = nn.ReLU(inplace=True)
+        self.sub_mean = MeanShift(1)
+        self.add_mean = MeanShift(1, sign=1)
+
+        m_head = [nn.Conv2d(in_channels=num_color, out_channels=num_chls, kernel_size=3, stride=1, padding=1, bias=False)]
+        m_body = list()
+        for _ in range(num_blocks):
+            m_body.append(ResBlock(num_chls, res_scale))
+        m_tail = list()
+        m_tail.append(Upsampler(scale, num_chls))
+        m_tail.append(nn.Conv2d(in_channels=num_chls, out_channels=num_color, kernel_size=3, stride=1, padding=1, bias=False))
+
+        self.head = nn.Sequential(*m_head)
+        self.body = nn.Sequential(*m_body)
+        self.tail = nn.Sequential(*m_tail)
+
+    def forward(self, x):
+        x = self.sub_mean(x)
+        x = self.head(x)
+
+        res = self.body(x)
+        res += x
+
+        x = self.tail(res)
+        x = self.add_mean(x)
+
+        return x

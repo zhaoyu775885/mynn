@@ -95,7 +95,7 @@ class ResNet(nn.Module):
         self.base_n_channel = channel_lists[0]
         self.n_class = n_class
         self.dcfg = dcfg
-        self.cell_fn = ResidualBlockLite if n_layer < 50 else BottleneckLite
+        self.cell_fn = ResidualBlockLite
         if n_layer not in cfg.keys():
             print('Numer of layers Error: ', n_layer)
             exit(1)

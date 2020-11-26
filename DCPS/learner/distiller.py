@@ -22,8 +22,8 @@ class Distiller(FullLearner):
         return self.net(images).detach()
 
     def kd_loss(self, std_logits, trg_logits):
-        t_dst = 4
-        w_dst = 10
+        t_dst = self.args.dst_temperature
+        w_dst = self.args.dst_loss_weight
         log_prob = self.log_softmax(std_logits / t_dst)
         prob = self.softmax(trg_logits / t_dst)
         loss = self.kd_loss_fn(log_prob, prob) * w_dst

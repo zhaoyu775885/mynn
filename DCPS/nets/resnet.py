@@ -25,15 +25,15 @@ def _weights_init(m):
         nn.init.kaiming_normal_(m.weight)
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_planes, out_planes, stride=2):
+    def __init__(self, in_planes, out_planes, strides=2):
         super(ResidualBlock, self).__init__()
         self.bn0 = nn.BatchNorm2d(in_planes)
-        self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=strides, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_planes)
         self.conv2 = nn.Conv2d(out_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.shortcut = None
-        if stride != 1 or in_planes != out_planes:
-            self.shortcut = nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+        if strides != 1 or in_planes != out_planes:
+            self.shortcut = nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=strides, bias=False)
 
     def forward(self, x):
         shortcut = x
@@ -52,14 +52,15 @@ class Bottleneck(nn.Module):
 class ResNet(nn.Module):
     def __init__(self, n_layer, n_class, base_n_channel=16):
         super(ResNet, self).__init__()
-        self.base_n_channel = base_n_channel
-        self.n_class = n_class
-        self.cell_fn = ResidualBlock if n_layer < 50 else Bottleneck
+
         if n_layer not in cfg.keys():
             print('Numer of layers Error: ', n_layer)
             exit(1)
-        self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
+        self.n_class = n_class
+        self.base_n_channel = base_n_channel
         self.block_n_cell = cfg[n_layer]
+        self.cell_fn = ResidualBlock
+        self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
         self.block_list = self._block_layers()
         self.bn = nn.BatchNorm2d(self.base_n_channel*(2**(len(self.block_n_cell)-1)))
         self.avgpool = nn.AvgPool2d(kernel_size=8)

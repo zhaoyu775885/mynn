@@ -64,9 +64,11 @@ class DcpsLearner(AbstractLearner):
         return torch.optim.lr_scheduler.MultiStepLR(self.opt_warmup, milestones=[100, 150], gamma=0.1)
 
     def _setup_lr_scheduler_train(self):
+        # return torch.optim.lr_scheduler.CosineAnnealingLR(self.opt_train, T_max=150, eta_min=1e-4)
         return torch.optim.lr_scheduler.MultiStepLR(self.opt_train, milestones=[50, 100], gamma=0.1)
 
     def _setup_lr_scheduler_search(self):
+        # return torch.optim.lr_scheduler.CosineAnnealingLR(self.opt_search, T_max=150, eta_min=1e-4)
         return torch.optim.lr_scheduler.MultiStepLR(self.opt_search, milestones=[50, 100], gamma=0.1)
 
     def metrics(self, outputs, labels, flops=None, prob_list=None):
@@ -79,21 +81,22 @@ class DcpsLearner(AbstractLearner):
                 prob_loss += entropy(prob)
             loss += 0.00*prob_loss
         tolerance = 0.01
-        target_flops = 2150000
-        coef = 0.2
-        if flops < (1 - tolerance) * target_flops:
-            coef = -10
-        elif flops > (1 + tolerance) * target_flops:
-            coef = 10
+        target_flops = 20000000
+        coef = 0.1
+        # if flops < (1 - tolerance) * target_flops:
+        #     coef = -10
+        # elif flops > (1 + tolerance) * target_flops:
+        #     coef = 10
         loss_with_flops = loss + coef * torch.log(flops)
         accuracy = correct / labels.size(0)
         return accuracy, loss, loss_with_flops
 
     def train(self, n_epoch=250, save_path='./models/slim'):
-        self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
-        tau = self.train_search(n_epoch=150,
-                                load_path=self.args.warmup_dir,
-                                save_path=self.args.search_dir)
+        # self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
+        # tau = self.train_search(n_epoch=150,
+        #                         load_path=self.args.warmup_dir,
+        #                         save_path=self.args.search_dir)
+        tau = 0.1
         self.train_prune(tau=tau, n_epoch=n_epoch,
                          load_path=self.args.search_dir,
                          save_path=save_path)
@@ -140,7 +143,9 @@ class DcpsLearner(AbstractLearner):
             self.recoder.init({'loss': 0, 'loss_f': 0, 'accuracy': 0,
                                'lr': self.opt_train.param_groups[0]['lr'],
                                'tau': tau})
+
             for i, data in enumerate(self.train_loader):
+                # tau = 10 - (10-0.1) / (total_iter-1) * current_iter
                 tau = 10 ** (1 - 2.0 * current_iter / (total_iter-1))
                 current_iter += 1
 
@@ -179,7 +184,7 @@ class DcpsLearner(AbstractLearner):
             self.recoder.update(epoch)
             self.lr_scheduler_train.step()
             self.lr_scheduler_search.step()
-            if (epoch + 1) % 5 == 0:
+            if (epoch + 1) % 10 == 0:
                 self.test(tau=tau)
 
             if (epoch + 1) % 10 == 0:
@@ -229,7 +234,7 @@ class DcpsLearner(AbstractLearner):
         # teacher_net = ResNet20(n_classes=self.dataset.n_class)
         # teacher = Distiller(self.dataset, teacher_net, self.device, self.args, model_path='./models/6884.pth')
 
-        net = ResNetL(20, self.dataset.n_class, channel_list_prune)
+        net = ResNetL(self.args.net_index, self.dataset.n_class, channel_list_prune)
         full_learner = FullLearner(self.dataset, net, device=self.device, args=self.args, teacher=self.teacher)
         print('FLOPs:', full_learner.cnt_flops())
         full_learner.train(n_epoch=n_epoch, save_path=save_path)
@@ -379,7 +384,7 @@ class DcpsLearner(AbstractLearner):
     #     return tau
 
 
-def get_prune_list(resnet_channel_list, prob_list, dcfg, expand_rate=0.1):
+def get_prune_list(resnet_channel_list, prob_list, dcfg, expand_rate=0.0001):
     import numpy as np
     prune_list = []
     idx = 0

@@ -2,7 +2,7 @@ FALSE=0
 TRUE=1
 
 # assign global devices
-export CUDA_VISIBLE_DEVICES='1'
+export CUDA_VISIBLE_DEVICES='0'
 
 # select from: ['cifar10', 'cifar100']
 DATASET='cifar100'
@@ -10,20 +10,19 @@ DATA_PATH='/home/zhaoyu/Datasets/cifar100'
 
 # network model type and index
 NET='resnet'
-NET_INDEX=20
-
+NET_INDEX=32
 
 # training parameters
-NUM_EPOCH=250
+NUM_EPOCH=600
 BATCH_SIZE=256
-STD_BATCH_SIZE=128
+STD_BATCH_SIZE=256
 STD_INIT_LR=1e-1
 
 # distillation switch
-DST_FLAG=${FALSE}
+DST_FLAG=${TRUE}
 
 # prune switch
-PRUNE_FLAG=${FALSE}
+PRUNE_FLAG=${TRUE}
 
 NET_DATASET=${NET}${NET_INDEX}_${DATASET}
 
@@ -33,7 +32,7 @@ BASIC_ARGUMENTS="--dataset ${DATASET}
                  --net_index $((NET_INDEX))
                  --num_epoch $((NUM_EPOCH))
                  --batch_size ${BATCH_SIZE}
-                 --std_batch_size ${BATCH_SIZE}
+                 --std_batch_size ${STD_BATCH_SIZE}
                  --std_init_lr ${STD_INIT_LR}"
 
 WORKROOT='workdir'
@@ -41,8 +40,8 @@ WORKROOT='workdir'
 DST_ARGUMENTS=" --dst_flag ${DST_FLAG} "
 if [ ${DST_FLAG} == ${TRUE} ]; then
 	TEACHER_NET='resnet'
-	TEACHER_NET_INDEX=20
-	DST_TEMPERATURE=4
+	TEACHER_NET_INDEX=$((NET_INDEX))
+	DST_TEMPERATURE=2
 	DST_LOSS_WEIGHT=4
 	TEACHER_DIR=${WORKROOT}/${NET_DATASET}/teacher
 	mkdir -p ${TEACHER_DIR}
