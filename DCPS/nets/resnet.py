@@ -46,8 +46,26 @@ class ResidualBlock(nn.Module):
         return x
 
 class Bottleneck(nn.Module):
-    def __init__(self):
+    def __init__(self, in_planes, out_planes, strides=2):
         super(Bottleneck, self).__init__()
+        self.bn0 = nn.BatchNorm2d(in_planes)
+        self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=strides, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_planes)
+        self.conv2 = nn.Conv2d(out_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_planes)
+        self.shortcut = None
+        if strides != 1 or in_planes != out_planes:
+            self.shortcut = nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=strides, bias=False)
+
+    def forward(self, x):
+        shortcut = x
+        x = F.relu(self.bn0(x))
+        if self.shortcut is not None:
+            shortcut = self.shortcut(x)
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = self.conv2(x)
+        x += shortcut
+        return x
 
 class ResNet(nn.Module):
     def __init__(self, n_layer, n_class, base_n_channel=16):
@@ -57,13 +75,22 @@ class ResNet(nn.Module):
             print('Numer of layers Error: ', n_layer)
             exit(1)
         self.n_class = n_class
-        self.base_n_channel = base_n_channel
         self.block_n_cell = cfg[n_layer]
-        self.cell_fn = ResidualBlock
-        self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
+        self.imagenet = len(self.block_n_cell) > 3
+
+        if self.imagenet:
+            self.base_n_channel = 64
+            self.cell_fn = Bottleneck if n_layer > 50 else ResidualBlock
+            self.conv0 = nn.Conv2d(3, self.base_n_channel, 7, stride=2, padding=3, bias=False)
+            self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        else:
+            self.base_n_channel = 16
+            self.cell_fn = ResidualBlock
+            self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
+
         self.block_list = self._block_layers()
         self.bn = nn.BatchNorm2d(self.base_n_channel*(2**(len(self.block_n_cell)-1)))
-        self.avgpool = nn.AvgPool2d(kernel_size=8)
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(self.base_n_channel*(2**(len(self.block_n_cell)-1)), self.n_class)
         self.apply(_weights_init)
 
@@ -84,6 +111,8 @@ class ResNet(nn.Module):
 
     def forward(self, x):
         x = self.conv0(x)
+        if self.imagenet:
+            x = self.maxpool(x)
         for blocks in self.block_list:
             for block in blocks[:]:
                 x = block(x)
