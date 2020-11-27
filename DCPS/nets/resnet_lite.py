@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from nets.resnet import _weights_init
+from thop import profile
 
 cfg = {
     18: [2, 2, 2, 2],
@@ -30,7 +31,7 @@ def fc_flops(inputs, outputs):
 class ResidualBlockLite(nn.Module):
     '''
     out_planes_list contains the corresponding number of convs.
-    out_planes_list: [c_shortcut, c1, c2], c2 == c_shortcut
+    out_planes_list: [c1, c2, c_shortcut], c2 == c_shortcut
     if len(out_planes_list) == 2:
         direct shortcut
     elif len(out_planes_list) == 3:
@@ -73,23 +74,81 @@ class ResidualBlockLite(nn.Module):
         return x
 
 class BottleneckLite(nn.Module):
-    pass
+    '''
+    out_planes_list contains the corresponding number of convs.
+    out_planes_list: [c1, c2, c3, c_shortcut], c2 == c_shortcut
+    if len(out_planes_list) == 2:
+        direct shortcut
+    elif len(out_planes_list) == 3:
+        shortcut with conv
+    '''
+    def __init__(self, in_planes, out_planes_list, stride=2, project=False):
+        super(BottleneckLite, self).__init__()
+        out_planes_1 = out_planes_list[0]
+        out_planes_2 = out_planes_list[1]
+        out_planes_3 = out_planes_list[2]
+        self.bn0 = nn.BatchNorm2d(in_planes, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
+        self.conv1 = nn.Conv2d(in_planes, out_planes_1, kernel_size=1, stride=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_planes_1, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
+        self.conv2 = nn.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_planes_2, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
+        self.shortcut = None
+        # if stride != 1 and len(out_planes_list) > 2:
+        if project:
+            self.shortcut = nn.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride,
+                                      padding=0, bias=False)
+        self.conv3 = nn.Conv2d(out_planes_2, out_planes_3, kernel_size=1, stride=1, bias=False)
+
+    def cnt_flops(self, x):
+        cnt_flops = 0
+        x = F.relu(self.bn0(x))
+        if self.shortcut is not None:
+            shortcut = self.shortcut(x)
+            cnt_flops += conv_flops(x, shortcut, 1)
+        conv1 = F.relu(self.bn1(self.conv1(x)))
+        cnt_flops += conv_flops(x, conv1, 1)
+        conv2 = F.relu(self.bn2(self.conv2(conv1)))
+        cnt_flops += conv_flops(conv1, conv2, 3)
+        conv3 = self.conv3(conv2)
+        cnt_flops += conv_flops(conv2, conv3, 1)
+        return cnt_flops
+
+    def forward(self, x):
+        shortcut = x
+        x = F.relu(self.bn0(x))
+        if self.shortcut is not None:
+            shortcut = self.shortcut(x)
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.conv3(x)
+        x += shortcut
+        return x
+
 
 class ResNetL(nn.Module):
     def __init__(self, n_layer, n_class, channel_lists):
         super(ResNetL, self).__init__()
-        self.channel_lists = channel_lists
-        self.base_n_channel = channel_lists[0]
-        self.n_class = n_class
-        self.cell_fn = ResidualBlockLite
+
         if n_layer not in cfg.keys():
             print('Numer of layers Error: ', n_layer)
             exit(1)
-        self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
+        self.n_class = n_class
         self.block_n_cell = cfg[n_layer]
+        self.imagenet = len(self.block_n_cell) > 3
+        self.base_n_channel = channel_lists[0]
+        self.channel_lists = channel_lists
+
+        if self.imagenet:
+            self.cell_fn = BottleneckLite if n_layer >= 50 else ResidualBlockLite
+            self.conv0 = nn.Conv2d(3, self.base_n_channel, 7, stride=2, padding=3, bias=False)
+            self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        else:
+            self.cell_fn = ResidualBlockLite
+            self.conv0 = nn.Conv2d(3, self.base_n_channel, 3, stride=1, padding=1, bias=False)
+
         self.block_list = self._block_layers()
         self.bn = nn.BatchNorm2d(channel_lists[-1][-1][-1], momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
-        self.avgpool = nn.AvgPool2d(kernel_size=8)
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(channel_lists[-1][-1][-1], self.n_class)
         self.apply(_weights_init)
 
@@ -102,7 +161,7 @@ class ResNetL(nn.Module):
     def _block_layers(self):
         block_list = []
         for i, n_cell in enumerate(self.block_n_cell):
-            if i==0:
+            if i == 0:
                 block_list.append(self._block_fn(self.base_n_channel, self.channel_lists[i+1], n_cell, 1))
             else:
                 in_planes = self.channel_lists[i][-1][-1]
@@ -112,8 +171,13 @@ class ResNetL(nn.Module):
     def cnt_flops(self, x):
         cnt_flops = 0
         conv0 = self.conv0(x)
-        cnt_flops += conv_flops(x, conv0, 3)
+        if self.imagenet:
+            cnt_flops += conv_flops(x, conv0, 7)
+        else:
+            cnt_flops += conv_flops(x, conv0, 3)
         x = conv0
+        if self.imagenet:
+            x = self.maxpool(x)
         for i, blocks in enumerate(self.block_list):
             for j, block in enumerate(blocks):
                 conv1 = block(x)
@@ -128,6 +192,8 @@ class ResNetL(nn.Module):
 
     def forward(self, x):
         x = self.conv0(x)
+        if self.imagenet:
+            x = self.maxpool(x)
         for blocks in self.block_list:
             for block in blocks:
                 x = block(x)
@@ -141,9 +207,9 @@ class ResNetL(nn.Module):
 def ResNetChannelList(n_layer):
     if n_layer == 18:
         return [64, [[64, 64, 64], [64, 64]],
-                [[64, 64, 64], [64, 64]],
-                [[64, 64, 64], [64, 64]],
-                [[64, 64, 64], [64, 64]]]
+                [[128, 128, 128], [128, 128]],
+                [[256, 256, 256], [256, 256]],
+                [[512, 512, 512], [512, 512]]]
     elif n_layer == 20:
         return [16, [[16, 16, 16], [16, 16], [16, 16]],
                 [[32, 32, 32], [32, 32], [32, 32]],
@@ -153,8 +219,11 @@ def ResNetChannelList(n_layer):
                 [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
                 [[64, 64, 64], [64, 64], [64, 64], [64, 64], [64, 64]]]
     elif n_layer == 50:
-        return [64, [[]]
-                    ]
+        return [64, [[64, 64, 256, 256], [64, 64, 256], [64, 64, 256]],
+                [[128, 128, 512, 512], [128, 128, 512], [128, 128, 512], [128, 128, 512]],
+                [[256, 256, 1024, 1024], [256, 256, 1024], [256, 256, 1024], [256, 256, 1024],
+                 [256, 256, 1024], [256, 256, 1024]],
+                [[512, 512, 2048, 2048], [512, 512, 2048], [512, 512, 2048]]]
     elif n_layer == 56:
         return [16, [[16, 16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16], [16, 16]],
                 [[32, 32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32], [32, 32]],
@@ -174,6 +243,10 @@ def ResNet32Lite(n_classes):
     channel_list_32 = ResNetChannelList(32)
     return ResNetL(32, n_classes, channel_list_32)
 
+def ResNet50Lite(n_classes):
+    channel_list_50 = ResNetChannelList(50)
+    return ResNetL(50, n_classes, channel_list_50)
+
 def ResNet56Lite(n_classes):
     channel_list_56 = ResNetChannelList(56)
     return ResNetL(56, n_classes, channel_list_56)
@@ -186,6 +259,8 @@ def ResNetLite(n_layer, n_class):
         return ResNet20Lite(n_class)
     elif n_layer == 32:
         return ResNet32Lite(n_class)
+    elif n_layer == 50:
+        return ResNet50Lite(n_class)
     elif n_layer == 56:
         return ResNet56Lite(n_class)
     else:
@@ -193,5 +268,15 @@ def ResNetLite(n_layer, n_class):
 
 
 if __name__ == '__main__':
-    net = ResNetLite(18, 10)
-    print(net)
+
+    # net = ResNetLite(56, 10)
+    # x = torch.zeros([16, 3, 32, 32])
+
+    net = ResNetLite(18, 1000)
+    x = torch.zeros([1, 3, 224, 224])
+
+    macs, params = profile(net, inputs=(x,))
+    print(macs, params)
+
+    flops = net.cnt_flops(x)
+    print(flops)

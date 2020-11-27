@@ -10,7 +10,7 @@ DATA_PATH='/home/zhaoyu/Datasets/cifar100'
 
 # network model type and index
 NET='resnet'
-NET_INDEX=32
+NET_INDEX=20
 
 # training parameters
 NUM_EPOCH=600
@@ -22,7 +22,7 @@ STD_INIT_LR=1e-1
 DST_FLAG=${TRUE}
 
 # prune switch
-PRUNE_FLAG=${TRUE}
+PRUNE_FLAG=${FALSE}
 
 NET_DATASET=${NET}${NET_INDEX}_${DATASET}
 
