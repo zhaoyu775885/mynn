@@ -22,17 +22,19 @@ This implementation is to weight the convolution after the BN layer.
 
 '''
 
-class ResidualBlockLite(nn.Module):
-    '''
+
+class ResidualBlockGated(nn.Module):
+    """
     out_planes_list contains the corresponding number of convs.
     out_planes_list: [c1, c2, c_shortcut], c2 == c_shortcut
     if len(out_planes_list) == 2:
         direct shortcut
     elif len(out_planes_list) == 3:
         shortcut with conv
-    '''
+    """
     def __init__(self, in_planes, out_planes_list, stride=2, project=False, dcfg=None):
-        super(ResidualBlockLite, self).__init__()
+        super(ResidualBlockGated, self).__init__()
+
         out_planes_1 = out_planes_list[0]
         out_planes_2 = out_planes_list[1]
         assert dcfg is not None
@@ -84,8 +86,44 @@ class ResidualBlockLite(nn.Module):
         # return x, prob, prob_list, flops_list
         return x, rmask_2, prob, prob_list, flops_list
 
-class BottleneckLite(nn.Module):
-    pass
+
+class BottleneckGated(nn.Module):
+    def __init__(self, in_planes, out_planes_list, stride=2, project=False, dcfg=None):
+        super(BottleneckGated, self).__init__()
+        out_planes_1 = out_planes_list[0]
+        out_planes_2 = out_planes_list[1]
+        out_planes_3 = out_planes_list[2]
+        assert dcfg is not None
+        self.dcfg = dcfg
+        self.dcfg_nonreuse = dcfg.copy()
+
+        self.bn0 = nn.BatchNorm2d(in_planes, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
+        self.conv1 = DNAS.Conv2d(in_planes, out_planes_1, kernel_size=1, stride=1, bias=False, dcfg=self.dcfg_nonreuse)
+        self.bn1 = nn.BatchNorm2d(out_planes_1, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
+        self.conv2 = nn.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=stride, padding=1, bias=False,
+                               dcfg=self.dcfg_nonreuse)
+        self.bn2 = nn.BatchNorm2d(out_planes_2, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
+        self.shortcut = None
+        # if stride != 1 and len(out_planes_list) > 2:
+        if project:
+            self.shortcut = nn.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride,
+                                      padding=0, bias=False, dcfg=self.dcfg_nonreuse)
+            self.dcfg.reuse_gate = self.shortcut.gate
+        self.conv3 = nn.Conv2d(out_planes_2, out_planes_3, kernel_size=1, stride=1, bias=False, dcfg=self.dcfg)
+
+    def forward(self, x, tau=1, noise=False, reuse_prob=None, rmask=None):
+        prob = reuse_prob
+        shortcut = x
+        x = self.bn0(x)
+        x = DNAS.weighted_feature(x, rmask)
+        x = F.relu(x)
+        if self.shortcut is not None:
+            shortcut = self.shortcut(x)
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.conv3(x)
+        x += shortcut
+        return x
 
 class ResNet(nn.Module):
     def __init__(self, n_layer, n_class, channel_lists, dcfg):
@@ -94,7 +132,7 @@ class ResNet(nn.Module):
         self.base_n_channel = channel_lists[0]
         self.n_class = n_class
         self.dcfg = dcfg
-        self.cell_fn = ResidualBlockLite
+        self.cell_fn = ResidualBlockGated
         if n_layer not in cfg.keys():
             print('Numer of layers Error: ', n_layer)
             exit(1)
