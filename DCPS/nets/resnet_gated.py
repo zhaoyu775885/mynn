@@ -32,6 +32,7 @@ class ResidualBlockGated(nn.Module):
     elif len(out_planes_list) == 3:
         shortcut with conv
     """
+
     def __init__(self, in_planes, out_planes_list, stride=2, project=False, dcfg=None):
         super(ResidualBlockGated, self).__init__()
 
@@ -56,9 +57,8 @@ class ResidualBlockGated(nn.Module):
     def forward(self, x, tau=1, noise=False, reuse_prob=None, rmask=None):
         prob = reuse_prob
         shortcut = x
-        x = self.bn0(x)
-        x = DNAS.weighted_feature(x, rmask)
-        x = F.relu(x)
+        # x = self.bn0(x), x = DNAS.weighted_feature(x, rmask), x = F.relu(x)
+        x = F.relu(DNAS.weighted_feature(self.bn0(x), rmask))
         prob_list, flops_list = [], []
         if self.shortcut is not None:
             shortcut, rmask, prob, shortcut_flops = self.shortcut(x, tau, noise, p_in=prob)
@@ -71,9 +71,8 @@ class ResidualBlockGated(nn.Module):
         x, rmask_1, p0, conv1_flops = self.conv1(x, tau, noise, p_in=prob)
         prob_list.insert(0, p0)
         flops_list.insert(0, conv1_flops)
-        x = self.bn1(x)
-        x = DNAS.weighted_feature(x, rmask_1)
-        x = F.relu(x)
+        # x = self.bn1(x), x = DNAS.weighted_feature(x, rmask_1), x = F.relu(x)
+        x = F.relu(DNAS.weighted_feature(self.bn1(x), rmask_1))
         x, rmask_2, prob, conv2_flops = self.conv2(x, tau, noise, reuse_prob=prob, p_in=p0)
         # todo: original implementation
         # x, prob, conv2_flops = self.conv2(x, tau, noise, reuse_prob=prob, p_in=p0)
@@ -100,30 +99,42 @@ class BottleneckGated(nn.Module):
         self.bn0 = nn.BatchNorm2d(in_planes, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.conv1 = DNAS.Conv2d(in_planes, out_planes_1, kernel_size=1, stride=1, bias=False, dcfg=self.dcfg_nonreuse)
         self.bn1 = nn.BatchNorm2d(out_planes_1, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
-        self.conv2 = nn.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=stride, padding=1, bias=False,
-                               dcfg=self.dcfg_nonreuse)
+        self.conv2 = DNAS.Conv2d(out_planes_1, out_planes_2, kernel_size=3, stride=stride, padding=1, bias=False,
+                                 dcfg=self.dcfg_nonreuse)
         self.bn2 = nn.BatchNorm2d(out_planes_2, momentum=_BATCH_NORM_DECAY, eps=_EPSILON)
         self.shortcut = None
         # if stride != 1 and len(out_planes_list) > 2:
         if project:
-            self.shortcut = nn.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride,
-                                      padding=0, bias=False, dcfg=self.dcfg_nonreuse)
+            self.shortcut = DNAS.Conv2d(in_planes, out_planes_list[-1], kernel_size=1, stride=stride,
+                                        padding=0, bias=False, dcfg=self.dcfg_nonreuse)
             self.dcfg.reuse_gate = self.shortcut.gate
-        self.conv3 = nn.Conv2d(out_planes_2, out_planes_3, kernel_size=1, stride=1, bias=False, dcfg=self.dcfg)
+        self.conv3 = DNAS.Conv2d(out_planes_2, out_planes_3, kernel_size=1, stride=1, bias=False, dcfg=self.dcfg)
 
     def forward(self, x, tau=1, noise=False, reuse_prob=None, rmask=None):
         prob = reuse_prob
         shortcut = x
-        x = self.bn0(x)
-        x = DNAS.weighted_feature(x, rmask)
-        x = F.relu(x)
+        x = F.relu(DNAS.weighted_feature(self.bn0(x), rmask))
+        prob_list, flops_list = [], []
         if self.shortcut is not None:
-            shortcut = self.shortcut(x)
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = self.conv3(x)
+            shortcut, rmask, prob, shortcut_flops = self.shortcut(x, tau, noise, p_in=prob)
+            prob_list.append(prob)
+            flops_list.append(shortcut_flops)
+
+        x, rmask_1, p1, conv1_flops = self.conv1(x, tau, noise, p_in=prob)
+        prob_list.insert(0, p1)
+        flops_list.insert(0, conv1_flops)
+        x = F.relu(DNAS.weighted_feature(self.bn1(x), rmask_1))
+
+        x, rmask_2, p2, conv2_flops = self.conv2(x, tau, noise, p_in=p1)
+        prob_list.insert(1, p2)
+        flops_list.insert(1, conv2_flops)
+        x = F.relu(DNAS.weighted_feature(self.bn2(x), rmask_2))
+
+        x, rmask_3, prob, conv3_flops = self.conv3(x, tau, noise, reuse_prob=prob, p_in=p2)
         x += shortcut
+        x = DNAS.weighted_feature(x, rmask)
         return x
+
 
 class ResNet(nn.Module):
     def __init__(self, n_layer, n_class, channel_lists, dcfg):
@@ -148,14 +159,14 @@ class ResNet(nn.Module):
     def _block_fn(self, in_planes, out_planes_lists, n_cell, strides):
         blocks = [self.cell_fn(in_planes, out_planes_lists[0], strides, project=True, dcfg=self.dcfg)]
         for i in range(1, n_cell):
-            blocks.append(self.cell_fn(out_planes_lists[i-1][-1], out_planes_lists[i], 1, dcfg=self.dcfg))
+            blocks.append(self.cell_fn(out_planes_lists[i - 1][-1], out_planes_lists[i], 1, dcfg=self.dcfg))
         return nn.ModuleList(blocks)
 
     def _block_layers(self):
         block_list = []
         for i, n_cell in enumerate(self.block_n_cell):
             if i == 0:
-                block = self._block_fn(self.base_n_channel, self.channel_lists[i+1], n_cell, 1)
+                block = self._block_fn(self.base_n_channel, self.channel_lists[i + 1], n_cell, 1)
                 block_list.append(block)
             else:
                 in_planes = self.channel_lists[i][-1][-1]
@@ -186,20 +197,24 @@ class ResNet(nn.Module):
         flops_list += [fc_flops]
         return x, prob_list, torch.sum(torch.stack(flops_list)), flops_list
 
+
 def ResNet20Gated(n_classes):
     dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
     channel_list_20 = ResNetChannelList(20)
     return ResNet(20, n_classes, channel_list_20, dcfg)
+
 
 def ResNet32Gated(n_classes):
     dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
     channel_list_32 = ResNetChannelList(32)
     return ResNet(32, n_classes, channel_list_32, dcfg)
 
+
 def ResNet56Gated(n_classes):
     dcfg = DNAS.DcpConfig(n_param=8, split_type=DNAS.TYPE_A, reuse_gate=None)
     channel_list_56 = ResNetChannelList(56)
     return ResNet(56, n_classes, channel_list_56, dcfg)
+
 
 def ResNetGated(n_layer, n_class):
     if n_layer == 20:
@@ -210,4 +225,3 @@ def ResNetGated(n_layer, n_class):
         return ResNet56Gated(n_class)
     else:
         assert n_layer in cfg.keys(), 'never meet resnet_{0}'.format(n_layer)
-
