@@ -204,7 +204,7 @@ if __name__ == '__main__':
     print(entropy(prob))
 
     # todo: to be deleted
-    # you should be shameful for this awkward loop-based implementation
+    # you should be ashamed for this awkward loop-based implementation
     # def __cnt_flops(self, in_size, p_in, out_size, p_out):
     #     c_in, h, w = in_size
     #     assert c_in == self.in_planes

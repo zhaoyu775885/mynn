@@ -10,7 +10,7 @@ DATA_PATH='/home/zhaoyu/Datasets/cifar100'
 
 # network model type and index
 NET='resnet'
-NET_INDEX=20
+NET_INDEX=50
 
 # training parameters
 NUM_EPOCH=600
@@ -19,7 +19,7 @@ STD_BATCH_SIZE=256
 STD_INIT_LR=1e-1
 
 # distillation switch
-DST_FLAG=${TRUE}
+DST_FLAG=${FALSE}
 
 # prune switch
 PRUNE_FLAG=${TRUE}

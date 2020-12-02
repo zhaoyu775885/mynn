@@ -133,10 +133,10 @@ class ResNetL(nn.Module):
             print('Numer of layers Error: ', n_layer)
             exit(1)
         self.n_class = n_class
-        self.block_n_cell = cfg[n_layer]
-        self.imagenet = len(self.block_n_cell) > 3
-        self.base_n_channel = channel_lists[0]
         self.channel_lists = channel_lists
+        self.block_n_cell = cfg[n_layer]
+        self.base_n_channel = channel_lists[0]
+        self.imagenet = len(self.block_n_cell) > 3
 
         if self.imagenet:
             self.cell_fn = BottleneckLite if n_layer >= 50 else ResidualBlockLite
@@ -231,48 +231,17 @@ def ResNetChannelList(n_layer):
     else:
         assert n_layer in cfg.keys(), 'never meet resnet_{0}'.format(n_layer)
 
-def ResNet18Lite(n_classes):
-    channel_list_18 = ResNetChannelList(18)
-    return ResNetL(18, n_classes, channel_list_18)
-
-def ResNet20Lite(n_classes):
-    channel_list_20 = ResNetChannelList(20)
-    return ResNetL(20, n_classes, channel_list_20)
-
-def ResNet32Lite(n_classes):
-    channel_list_32 = ResNetChannelList(32)
-    return ResNetL(32, n_classes, channel_list_32)
-
-def ResNet50Lite(n_classes):
-    channel_list_50 = ResNetChannelList(50)
-    return ResNetL(50, n_classes, channel_list_50)
-
-def ResNet56Lite(n_classes):
-    channel_list_56 = ResNetChannelList(56)
-    return ResNetL(56, n_classes, channel_list_56)
-
 
 def ResNetLite(n_layer, n_class):
-    if n_layer == 18:
-        return ResNet18Lite(n_class)
-    elif n_layer == 20:
-        return ResNet20Lite(n_class)
-    elif n_layer == 32:
-        return ResNet32Lite(n_class)
-    elif n_layer == 50:
-        return ResNet50Lite(n_class)
-    elif n_layer == 56:
-        return ResNet56Lite(n_class)
-    else:
-        assert n_layer in cfg.keys(), 'never meet resnet_{0}'.format(n_layer)
+    channel_list = ResNetChannelList(n_layer)
+    return ResNetL(n_layer, n_class, channel_list)
 
 
 if __name__ == '__main__':
-
     # net = ResNetLite(56, 10)
     # x = torch.zeros([16, 3, 32, 32])
 
-    net = ResNetLite(18, 1000)
+    net = ResNetLite(50, 1000)
     x = torch.zeros([1, 3, 224, 224])
 
     macs, params = profile(net, inputs=(x,))

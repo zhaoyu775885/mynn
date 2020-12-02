@@ -92,11 +92,11 @@ class DcpsLearner(AbstractLearner):
         return accuracy, loss, loss_with_flops
 
     def train(self, n_epoch=250, save_path='./models/slim'):
-        # self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
-        # tau = self.train_search(n_epoch=150,
-        #                         load_path=self.args.warmup_dir,
-        #                         save_path=self.args.search_dir)
-        tau = 0.1
+        self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
+        tau = self.train_search(n_epoch=150,
+                                load_path=self.args.warmup_dir,
+                                save_path=self.args.search_dir)
+        # tau = 0.1
         self.train_prune(tau=tau, n_epoch=n_epoch,
                          load_path=self.args.search_dir,
                          save_path=save_path)

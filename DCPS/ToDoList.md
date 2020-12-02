@@ -16,3 +16,5 @@
 15. extend to mobilenet
 16. Problem: darts 不加入早上，flops收敛到最小，为什么还可以保持高精度
 17. BN 的 momentum
+18. resolve the problem of runtime device
+19. GPU parallelization  
