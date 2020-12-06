@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.optim as optim
 from timeit import default_timer as timer
 from nets.resnet_lite import ResNetL
-from nets.resnet import ResNet20
 from learner.abstract_learner import AbstractLearner
 from learner.full import FullLearner
 from learner.distiller import Distiller

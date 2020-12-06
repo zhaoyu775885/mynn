@@ -18,3 +18,7 @@
 17. BN 的 momentum
 18. resolve the problem of runtime device
 19. GPU parallelization  
+20. fully comprehend the pre-process for imagenet
+21. get familiar with dataloader and dataset class in PyTorch
+22. Nvidia DALI
+23. shuffle dataset in DatasetSearch

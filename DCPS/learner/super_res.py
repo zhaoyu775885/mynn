@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from dcps.DNAS import dnas
+import utils.DNAS as DNAS
 from timeit import default_timer as timer
 from learner.abstract_learner import AbstractLearner
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
@@ -149,7 +149,7 @@ class DcpsLearner(AbstractLearner):
         
     def train_prune(self, tau, n_epoch=250, load_path, save_path):
         self.load_model(load_path)
-        dcfg = dnas.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
+        dcfg = DNAS.DcpConfig(n_param=8, split_type=dnas.TYPE_A, reuse_gate=None)
         data = next(iter(self.train_loader))
         in_data, im_gt = [x.to(self.device) for x in data]
         self.net.eval()

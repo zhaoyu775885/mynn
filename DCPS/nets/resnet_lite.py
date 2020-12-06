@@ -241,8 +241,8 @@ if __name__ == '__main__':
     # net = ResNetLite(56, 10)
     # x = torch.zeros([16, 3, 32, 32])
 
-    net = ResNetLite(50, 1000)
-    x = torch.zeros([1, 3, 224, 224])
+    net = ResNetLite(20, 100)
+    x = torch.zeros([1, 3, 32, 32])
 
     macs, params = profile(net, inputs=(x,))
     print(macs, params)

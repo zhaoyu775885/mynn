@@ -98,7 +98,7 @@ class ResNet(nn.Module):
         self.block_list = self._block_layers()
         self.bn = nn.BatchNorm2d(self.base_n_channel*(2**(len(self.block_n_cell)-1)) * self.expansion)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(self.base_n_channel*(2**(len(self.block_n_cell)-1) * self.expansion), self.n_class)
+        self.fc = nn.Linear(self.base_n_channel*(2**(len(self.block_n_cell)-1)) * self.expansion, self.n_class)
         self.apply(_weights_init)
 
     def _block_fn(self, in_planes, out_planes, n_cell, strides):
@@ -132,16 +132,12 @@ class ResNet(nn.Module):
         x = self.fc(x)
         return x
 
-def ResNet20(n_classes):
-    return ResNet(20, n_classes)
-
-def ResNet32(n_classes):
-    return ResNet(32, n_classes)
 
 if __name__ == '__main__':
-    net = ResNet(18, 1000)
-    x = torch.zeros([1, 3, 224, 224])
+    net = ResNet(20, 100)
+    x = torch.zeros([1, 3, 32, 32])
     y = net(x)
+    print(net)
 
-    macs, params = profile(net, inputs=(x,))
-    print(macs, params)
+    # macs, params = profile(net, inputs=(x,))
+    # print(macs, params)

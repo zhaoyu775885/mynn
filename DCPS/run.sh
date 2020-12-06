@@ -2,7 +2,7 @@ FALSE=0
 TRUE=1
 
 # assign global devices
-export CUDA_VISIBLE_DEVICES='0'
+export CUDA_VISIBLE_DEVICES='1'
 
 # select from: ['cifar10', 'cifar100']
 DATASET='cifar100'
@@ -10,7 +10,7 @@ DATA_PATH='/home/zhaoyu/Datasets/cifar100'
 
 # network model type and index
 NET='resnet'
-NET_INDEX=50
+NET_INDEX=20
 
 # training parameters
 NUM_EPOCH=600
@@ -22,7 +22,7 @@ STD_INIT_LR=1e-1
 DST_FLAG=${FALSE}
 
 # prune switch
-PRUNE_FLAG=${TRUE}
+PRUNE_FLAG=${FALSE}
 
 NET_DATASET=${NET}${NET_INDEX}_${DATASET}
 
