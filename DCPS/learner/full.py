@@ -5,7 +5,8 @@ from timeit import default_timer as timer
 from learner.abstract_learner import AbstractLearner
 import os
 
-L2_REG = 5e-4
+# L2_REG = 5e-4
+# todo:
 
 
 class FullLearner(AbstractLearner):
@@ -27,7 +28,7 @@ class FullLearner(AbstractLearner):
 
     def _setup_optimizer(self):
         return optim.SGD(self.forward.parameters(), lr=self.init_lr,
-                         momentum=self.args.momentum, weight_decay=L2_REG)
+                         momentum=self.args.momentum, weight_decay=self.args.weight_decay)
 
     def _setup_lr_scheduler(self):
         return torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, T_max=self.args.num_epoch)

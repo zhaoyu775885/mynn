@@ -15,8 +15,8 @@ from nets.resnet_lite import ResNetChannelList
 
 # BATCH_SIZE = 128
 # INIT_LR = 1e-1
-MOMENTUM = 0.9
-L2_REG = 5e-4
+# MOMENTUM = 0.9
+# L2_REG = 5e-4
 
 
 class DcpsLearner(AbstractLearner):
@@ -49,11 +49,11 @@ class DcpsLearner(AbstractLearner):
 
     def _setup_optimizer_warmup(self):
         vars = [item[1] for item in self.forward.named_parameters() if 'gate' not in item[0]]
-        return optim.SGD(vars, lr=self.init_lr, momentum=self.args.momentum, weight_decay=L2_REG)
+        return optim.SGD(vars, lr=self.init_lr, momentum=self.args.momentum, weight_decay=self.args.weight_decay)
 
     def _setup_optimizer_train(self):
         vars = [item[1] for item in self.forward.named_parameters() if 'gate' not in item[0]]
-        return optim.SGD(vars, lr=self.init_lr*0.1, momentum=MOMENTUM, weight_decay=L2_REG)
+        return optim.SGD(vars, lr=self.init_lr*0.1, momentum=self.args.momentum, weight_decay=self.args.weight_decay)
 
     def _setup_optimizer_search(self):
         gates = [item[1] for item in self.forward.named_parameters() if 'gate' in item[0]]
@@ -91,11 +91,11 @@ class DcpsLearner(AbstractLearner):
         return accuracy, loss, loss_with_flops
 
     def train(self, n_epoch=250, save_path='./models/slim'):
-        self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
-        tau = self.train_search(n_epoch=150,
-                                load_path=self.args.warmup_dir,
-                                save_path=self.args.search_dir)
-        # tau = 0.1
+        # self.train_warmup(n_epoch=150, save_path=self.args.warmup_dir)
+        # tau = self.train_search(n_epoch=150,
+        #                         load_path=self.args.warmup_dir,
+        #                         save_path=self.args.search_dir)
+        tau = 0.1
         self.train_prune(tau=tau, n_epoch=n_epoch,
                          load_path=self.args.search_dir,
                          save_path=save_path)

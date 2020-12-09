@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 from datasets.cifar import Cifar10, Cifar100
+from datasets.imagenet import ImageNet
 from nets.resnet import ResNet
 from nets.resnet_lite import ResNetLite
 from nets.resnet_gated import ResNetGated
@@ -15,7 +16,7 @@ from learner.distiller import Distiller
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', default='cifar100', choices=['cifar10', 'cifar100'], help='Dataset Name')
+    parser.add_argument('--dataset', default='cifar100', choices=['cifar10', 'cifar100', 'imagenet'], help='Dataset Name')
     parser.add_argument('--data_path', type=str, help='Dataset Directory')
     parser.add_argument('--net', default='resnet', choices=['resnet', 'mobilenet'], help='Net')
     parser.add_argument('--net_index', default=20, type=int, choices=[18, 20, 32, 34, 50, 56], help='Index')
@@ -24,6 +25,7 @@ def main():
     parser.add_argument('--batch_size_test', default=100, type=int, help='Batch Size for Test')
     parser.add_argument('--std_batch_size', default=128, type=int, help='Norm Batch Size')
     parser.add_argument('--std_init_lr', default=1e-1, type=float, help='Norm Init Lr')
+    parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight Decay')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum for SGD')
     parser.add_argument('--dst_flag', default=0, type=int, help='Dst Flag')
     parser.add_argument('--prune_flag', default=0, type=int, help='Prune Flag')
@@ -39,7 +41,13 @@ def main():
     parser.add_argument('--teacher_dir', type=str, help='Index')
     args = parser.parse_args()
 
-    dataset_fn = Cifar10 if args.dataset == 'cifar10' else Cifar100
+    if args.dataset == 'cifar10':
+        dataset_fn = Cifar10
+    elif args.dataset == 'cifar100':
+        dataset_fn = Cifar100
+    elif args.dataset == 'imagenet':
+        dataset_fn = ImageNet
+
     dataset = dataset_fn(args.data_path)
     n_class = dataset.n_class
 
