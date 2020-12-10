@@ -65,8 +65,6 @@ def main():
         learner.test()
     else:
         net = ResNetGated(args.net_index, n_class)
-        # print(args.net_index, net)
-        # exit(1)
         learner = DcpsLearner(dataset, net, device, args, teacher=teacher)
         learner.train(n_epoch=args.num_epoch, save_path=args.slim_dir)
 

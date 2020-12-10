@@ -19,11 +19,13 @@ class ImageNet:
                                               transforms.ToTensor(),
                                               normalize])
 
-        valid_transform = transforms.Compose([transforms.ToTensor(),
+        valid_transform = transforms.Compose([transforms.Resize(256),
+                                              transforms.CenterCrop(224),
+                                              transforms.ToTensor(),
                                               normalize])
 
         dataset_fn = self.dataset_fn_search if search else self.dataset_fn_base
-        imagenet_dataset = dataset_fn(root=self.data_dir, split='train',
+        imagenet_dataset = dataset_fn(root=self.data_dir, split='train' if is_train else 'val',
                                       transform=train_transform if is_train else valid_transform)
 
         print('---------')
